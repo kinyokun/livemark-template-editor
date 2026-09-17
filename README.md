@@ -1,10 +1,12 @@
 # Livemark 模版工坊（浏览器版）
 
-在电脑上排 Livemark 的分享模版，导出 `.encoretemplate` 隔空投送到 iPhone，双击即在 App 里打开。
+在电脑上排 Livemark 的分享模版，导出 `.lmtemplate` 隔空投送到 iPhone，双击即在 App 里打开。
 
 ## 打开
 
-直接双击 `index.html`，或者拖进浏览器。没有构建步骤，没有依赖，`file://` 与 `http://` 都能跑。
+线上版：<https://kinyokun.github.io/livemark-template-editor/>（公开仓库 `kinyokun/livemark-template-editor`，由 `scripts/publish_web_editor.sh` 从这里同步）。
+
+本地：直接双击 `index.html`，或者拖进浏览器。没有构建步骤，没有依赖，`file://` 与 `http://` 都能跑。
 
 ```sh
 # 想用本地服务器也行
@@ -24,7 +26,7 @@ cd Web/template-editor && python3 -m http.server 8731
 
 ## 和 App 对接
 
-- **导出模版**：写出 `<模版名>.encoretemplate`。文件结构与 `TemplateDocument.encode` 一致：键按字典序排、`nil` 的键整把省掉、`Data` 走 base64、日期是不带小数秒的 ISO-8601、UUID 大写带横杠。空画布（没有元素且封面关掉）会被拦下，因为 App 的解码器也不收。
+- **导出模版**：写出 `<模版名>.lmtemplate`（build 26 以前叫 `.encoretemplate`，App 两种都收）。文件结构与 `TemplateDocument.encode` 一致：键按字典序排、`nil` 的键整把省掉、`Data` 走 base64、日期是不带小数秒的 ISO-8601、UUID 大写带横杠。空画布（没有元素且封面关掉）会被拦下，因为 App 的解码器也不收。
 - **发送到 iPhone**：把导出的文件隔空投送给自己，在 iPhone 上点开即进 Livemark，导入时 App 会重新发一个 id，不会覆盖你已有的模版。
 - **导入**：点「导入」或把文件拖到页面上。校验与 `TemplateDocument.decode` 同一套：版本号、8 MB / 40 MB 视频 / 64 MB 文件三道尺寸上限、PNG / JPEG / GIF / WebP / HEIF 的魔数、`qt  ` `isom` `mp41` `mp42` `M4V ` `avc1` 的视频魔数；带 `imageAsset` / `videoAsset` 的文件一律拒绝。也能一次导入一个 JSON 数组（例如 `builtins.json`）。
 - **导出图片**：按模版自己的导出尺寸（`exportWidth`，默认 1080 宽）用 `<canvas>` 画一遍再下载，占位虚线框不会印上去。

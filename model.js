@@ -456,7 +456,7 @@
   function DocumentError(message) { this.name = 'TemplateDocumentError'; this.message = message; }
   DocumentError.prototype = Object.create(Error.prototype);
 
-  /// 返回 .encoretemplate 的文本；结构与 TemplateDocument.encode 一致。
+  /// 返回 .lmtemplate 的文本；结构与 TemplateDocument.encode 一致。
   function encodeDocument(template) {
     var value = sanitize(template);
     // App 的解码器不收空画布，这里先拦下来，免得导出一个对面打不开的文件。
@@ -483,7 +483,7 @@
   function fileName(template) {
     var cleaned = String(template.name || '').split(/[/\\:?%*|"<>\n\r]/).join('-');
     var trimmed = prefix(cleaned.trim(), 40);
-    return (trimmed || '我的模版') + '.encoretemplate';
+    return (trimmed || '我的模版') + '.lmtemplate';
   }
 
   /// 解码一个文件，规则与 TemplateDocument.decode 一样：清洗、换新 id、去重。
