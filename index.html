@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Livemark 模版工坊</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">LIVEMARK<small>模版工坊</small></div>
+  <div class="grow"></div>
+  <button class="btn" id="btnImport">导入</button>
+  <button class="btn" id="btnSave">存入模版库</button>
+  <button class="btn" id="btnExportFile">导出模版</button>
+  <button class="btn primary" id="btnExportPNG">导出图片</button>
+  <div class="tip">导出的 .encoretemplate 用隔空投送发到 iPhone，双击即在 Livemark 里打开。</div>
+  <input type="file" id="fileImport" accept=".encoretemplate,.json,application/json" hidden>
+</header>
+
+<div class="shell">
+  <aside class="library" id="library"></aside>
+
+  <section class="stage">
+    <div class="stage-bar">
+      <div class="menu-wrap">
+        <button class="btn small" id="btnLayerMenu">图层 · <span id="layerName">画布与底图</span> ▾</button>
+      </div>
+      <div class="menu-wrap">
+        <button class="btn small primary" id="btnAddElement">添加元素 ＋</button>
+      </div>
+      <div class="grow"></div>
+      <span class="hint" id="canvasNote"></span>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="board" id="board">
+        <canvas id="canvas"></canvas>
+        <canvas id="overlay" class="overlay"></canvas>
+      </div>
+    </div>
+    <div class="stage-foot">
+      <span>拖动移动 · 滚轮缩放 · 角点拉伸</span>
+      <span>Delete 删除 · 方向键微调 · ⌘D 复制 · ⌘Z 撤销</span>
+      <span id="sizeNote"></span>
+    </div>
+  </section>
+
+  <aside class="inspector" id="inspector"></aside>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="drop-veil" id="dropVeil">松手导入 .encoretemplate</div>
+
+<input type="file" id="filePickImage" accept="image/*" hidden>
+<input type="file" id="filePickVideo" accept="video/quicktime,video/mp4,.mov,.mp4" hidden>
+
+<script src="builtins.js"></script>
+<script src="covers.js"></script>
+<script src="model.js"></script>
+<script src="render.js"></script>
+<script src="ui.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
