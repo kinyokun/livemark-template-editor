@@ -353,7 +353,10 @@
   /// images：Map<key, HTMLImageElement | HTMLVideoElement | null>
   /// 回填每一层的框（画布 pt，未旋转），编辑器拿它做命中测试与选中框；
   /// 图片层还带溢出量，拖动改 focus 要除以它。
-  function paintScene(ctx, scene, images) {
+  /// options.alphaFor(item)：编辑器的「聚焦 / 布局」模式用它把某些图元调暗
+  /// （返回 0 就整个跳过，只回填 frame）。不影响导出——导出时不传 options。
+  function paintScene(ctx, scene, images, options) {
+    var alphaFor = options && options.alphaFor ? options.alphaFor : null;
     var frames = {};
     frames[CANVAS_LAYER_ID] = { x: 0, y: 0, width: scene.width, height: scene.height };
     ctx.save();
@@ -394,6 +397,18 @@
       }
       if (item.kind === 'clipEnd') {
         if (clipDepth > 0) { ctx.restore(); clipDepth -= 1; }
+        return;
+      }
+      var alpha = alphaFor ? alphaFor(item) : 1;
+      if (alpha <= 0) {
+        frames[item.id] = Object.assign({}, item.frame);
+        return;
+      }
+      if (alpha < 1) {
+        ctx.save();
+        ctx.globalAlpha *= alpha;
+        frames[item.id] = paintItem(ctx, item, images);
+        ctx.restore();
         return;
       }
       frames[item.id] = paintItem(ctx, item, images);

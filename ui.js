@@ -93,6 +93,9 @@
     this.zoom = 1;
     this.history = [];
     this.more = false;              // 检查器的「更多」是否展开
+    this.focusMode = 'all';         // 图层聚焦：all（全部）/ dim（突出）/ solo（单独）
+    this.layoutMode = false;        // 布局模式：只显示框线，自由拖拽换容器
+    this.sideTab = 'library';       // 左栏页签：library（模版）/ layers（图层）
     this.library = this.loadLibrary();
     this.frames = {};
     this.scene = null;
@@ -212,7 +215,7 @@
     var ctx = this.canvas.getContext('2d');
     ctx.setTransform(dpr * view, 0, 0, dpr * view, 0, 0);
     ctx.clearRect(0, 0, w, hgt);
-    this.frames = R.paintScene(ctx, scene, this.images.map);
+    this.frames = R.paintScene(ctx, scene, this.images.map, this.paintOptions ? this.paintOptions() : null);
     this.drawOverlay();
 
     var note = document.getElementById('sizeNote');
@@ -228,26 +231,37 @@
     var dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr * this.zoom, 0, 0, dpr * this.zoom, 0, 0);
     ctx.clearRect(0, 0, this.scene.width, this.scene.height);
-    var frame = this.frames[this.selection];
-    if (!frame) return;
-    var laid = this.selection === CANVAS ? null : this.scene.layout.byID[this.selection];
-    var box = laid && laid.rotation ? R.boundingBox(frame, laid.rotation) : frame;
-    ctx.save();
-    ctx.strokeStyle = '#3b82f6';
-    ctx.lineWidth = 1 / this.zoom;
-    ctx.setLineDash(this.selection === CANVAS ? [4, 3] : []);
-    ctx.strokeRect(box.x + 0.5 / this.zoom, box.y + 0.5 / this.zoom,
-      Math.max(0, box.width - 1 / this.zoom), Math.max(0, box.height - 1 / this.zoom));
-    ctx.setLineDash([]);
-    if (this.selection !== CANVAS) {
-      var s = 5 / this.zoom;
-      ctx.fillStyle = '#3b82f6';
-      [[box.x, box.y], [box.x + box.width, box.y],
-       [box.x, box.y + box.height], [box.x + box.width, box.y + box.height]].forEach(function (p) {
-        ctx.fillRect(p[0] - s / 2, p[1] - s / 2, s, s);
-      });
+    if (this.layoutMode && this.drawWireframes) this.drawWireframes(ctx);
+    var frame = this.frameFor(this.selection);
+    if (frame) {
+      var laid = this.selection === CANVAS ? null : this.scene.layout.byID[this.selection];
+      var box = laid && laid.rotation ? R.boundingBox(frame, laid.rotation) : frame;
+      ctx.save();
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 1 / this.zoom;
+      ctx.setLineDash(this.selection === CANVAS ? [4, 3] : []);
+      ctx.strokeRect(box.x + 0.5 / this.zoom, box.y + 0.5 / this.zoom,
+        Math.max(0, box.width - 1 / this.zoom), Math.max(0, box.height - 1 / this.zoom));
+      ctx.setLineDash([]);
+      if (this.selection !== CANVAS) {
+        var s = 5 / this.zoom;
+        ctx.fillStyle = '#3b82f6';
+        [[box.x, box.y], [box.x + box.width, box.y],
+         [box.x, box.y + box.height], [box.x + box.width, box.y + box.height]].forEach(function (p) {
+          ctx.fillRect(p[0] - s / 2, p[1] - s / 2, s, s);
+        });
+      }
+      ctx.restore();
     }
-    ctx.restore();
+    if (this.layoutMode && this.drawLayoutDrag) this.drawLayoutDrag(ctx);
+  };
+
+  /// 选中框用的框：画过的图元优先（带溢出量），没画的（比如透明容器）退回排版结果。
+  App.prototype.frameFor = function (id) {
+    if (this.frames[id]) return this.frames[id];
+    if (id === CANVAS || !this.scene) return null;
+    var laid = this.scene.layout.byID[id];
+    return laid && !laid.collapsed ? laid.frame : null;
   };
 
   App.prototype.refresh = function () {
@@ -256,6 +270,7 @@
     this.renderLibrary();
     this.renderInspector();
     this.renderTopBar();
+    if (this.renderStageTools) this.renderStageTools();
   };
 
   App.prototype.toast = function (message) {
@@ -310,6 +325,12 @@
     var self = this;
     var box = document.getElementById('library');
     box.textContent = '';
+
+    if (this.renderSideTabs) this.renderSideTabs(box);
+    if (this.sideTab === 'layers' && this.renderLayersPanel) {
+      this.renderLayersPanel(box);
+      return;
+    }
 
     box.appendChild(h('div', { class: 'section-title', text: '内置风格' }));
     LM.SHARE_STYLES.forEach(function (style) {
@@ -1139,7 +1160,7 @@
 
     this.overlay.addEventListener('pointerdown', function (event) {
       var point = self.point(event);
-      var hits = self.hits(point);
+      var hits = self.layoutMode && self.layoutHits ? self.layoutHits(point) : self.hits(point);
       var ids = hits.map(function (hit) { return hit.id; });
       var next;
       if (!ids.length) {
@@ -1165,6 +1186,12 @@
       self._clickedSame = false;
       var node = drag.node;
 
+      if (self.layoutMode) {
+        // 布局模式：拖动 = 换容器 / 换位，松手才落地。
+        if (drag.id !== CANVAS && node && !self.isRoot(node.id)) self.layoutDragMove(drag, point);
+        return;
+      }
+
       if (drag.id === CANVAS) {
         // 底图：同一套规则，框是整张画布。
         var frame = self.frames[CANVAS];
@@ -1187,6 +1214,7 @@
 
     this.overlay.addEventListener('pointerup', function (event) {
       if (drag) self.overlay.releasePointerCapture(event.pointerId);
+      if (drag && self.layoutMode && drag.moved && self.layoutDragEnd) self.layoutDragEnd(drag);
       drag = null;
     });
 
@@ -1263,6 +1291,11 @@
         return;
       }
       if (event.key === 'Escape') { self.selection = CANVAS; self.refresh(); return; }
+      if (!meta && (event.key === 'l' || event.key === 'L')) {
+        event.preventDefault();
+        self.setLayoutMode(!self.layoutMode);
+        return;
+      }
       var current = self.node();
       if (!current || self.isRoot(current.id)) return;
       if (event.key === 'Delete' || event.key === 'Backspace') {
