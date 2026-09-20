@@ -1,17 +1,19 @@
 // 由 scripts/build_web_editor.js 从 App 的 TypeScript 源码生成，不要手改。
-// 源文件：src/core/template/model.ts、src/core/template/layout.ts、src/core/template/document.ts、src/core/template/builtins.ts、src/features/share/scene.ts
+// 源文件：src/core/models.ts、src/core/uuid.ts、src/core/sha256.ts、src/core/customFields.ts、src/core/template/canvas.ts、src/core/template/grid.ts、src/core/template/canvasLayout.ts、src/core/template/fontCatalog.ts、src/core/template/model.ts、src/core/template/layout.ts、src/core/template/document.ts、src/core/template/builtins.ts、src/features/share/scene.ts
 //
-// 浏览器里用 window.LMCore 拿到它们的全部导出（同名的按 core/template/model → core/template/layout → core/template/document → core/template/builtins → share/scene 覆盖）。
+// 浏览器里用 window.LMCore 拿到它们的全部导出（同名的按 core/models → core/customFields → core/template/fontCatalog → core/template/canvas → core/template/model → core/template/layout → core/template/document → core/template/builtins → share/scene 覆盖）。
 (function (global) {
   'use strict';
 
   var ALIASES = {
+    "@/core/uuid": "core/uuid",
     "@/core/template/model": "core/template/model",
     "@/core/template/layout": "core/template/layout",
     "@/core/template/document": "core/template/document",
     "@/core/template/builtins": "core/template/builtins",
     "@/core/labels": "shims/labels",
-    "@/core/models": "shims/models",
+    "@/core/models": "core/models",
+    "@/core/customFields": "core/customFields",
     "@/i18n": "shims/i18n"
   };
   var factories = {};
@@ -44,18 +46,2427 @@
     };
   }
 
+  define("core/models", function (module, exports, require) {
+    "use strict";
+    // 档案里的模型。对应 Swift 的 `Encore/Core/Models.swift` 与 `Encore/Core/RecordType.swift`
+    // （以及 `SetlistTrack.swift`、`EventReminder.swift`、`VenueLocation.swift`、`Places.swift`
+    // 里那几个随记录一起存的小类型）。
+    //
+    // 硬约束：
+    // - 枚举的原始值是中文，存储时保持中文原文。
+    // - 可选字段用 `undefined` 表示 Swift 的 `nil`；编码时那个键直接不出现。
+    // - 二进制用 `Uint8Array`；编码成 base64（见 archive.ts）。
+    // - 这一层不 import react / react-native / expo，也不做文件 IO。
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.BUILT_IN_CATALOG = exports.RECORD_FIELDS = exports.RecordField = exports.ARCHIVE_VERSION = exports.LEGACY_SIGNATURE = exports.SHARE_STYLES = exports.ShareStyle = exports.APPEARANCES = exports.Appearance = exports.SWIFT_GALLERY_LAYOUTS = exports.GALLERY_LAYOUTS = exports.GalleryLayout = exports.TILE_FIELDS = exports.TileField = exports.ACCENT_THEMES = exports.AccentTheme = exports.SETLIST_PREVIEW_COUNT = exports.RECENT_VENUE_LIMIT = exports.EVENT_REMINDER_PURPOSES = exports.EventReminderPurpose = exports.COVER_ARTS = exports.CoverArt = exports.RECORD_STATUSES = exports.RecordStatus = exports.EVENT_KINDS = exports.EventKind = void 0;
+    exports.isEventKind = isEventKind;
+    exports.eventKindSymbol = eventKindSymbol;
+    exports.eventKindEnglish = eventKindEnglish;
+    exports.isRecordStatus = isRecordStatus;
+    exports.isCoverArt = isCoverArt;
+    exports.eventKindArtwork = eventKindArtwork;
+    exports.venueHasCoordinate = venueHasCoordinate;
+    exports.venueQuery = venueQuery;
+    exports.placeNameKey = placeNameKey;
+    exports.sanitizeRecentVenues = sanitizeRecentVenues;
+    exports.addingRecentVenue = addingRecentVenue;
+    exports.makeEventRecord = makeEventRecord;
+    exports.makeExtraField = makeExtraField;
+    exports.makeMemoryPhoto = makeMemoryPhoto;
+    exports.makeEventReminder = makeEventReminder;
+    exports.hasConfirmedDate = hasConfirmedDate;
+    exports.hasConfirmedTime = hasConfirmedTime;
+    exports.acceptsReminders = acceptsReminders;
+    exports.locationLine = locationLine;
+    exports.searchableText = searchableText;
+    exports.eventTimeZoneOffsetSeconds = eventTimeZoneOffsetSeconds;
+    exports.eventDateParts = eventDateParts;
+    exports.calendarDay = calendarDay;
+    exports.startsBy = startsBy;
+    exports.setlistTrackLine = setlistTrackLine;
+    exports.setlistTrackNumber = setlistTrackNumber;
+    exports.setlistPreview = setlistPreview;
+    exports.reconcileSetlist = reconcileSetlist;
+    exports.songs = songs;
+    exports.isValidLink = isValidLink;
+    exports.setlistLink = setlistLink;
+    exports.isAccentTheme = isAccentTheme;
+    exports.accentHex = accentHex;
+    exports.accentDeepHex = accentDeepHex;
+    exports.accentTintHex = accentTintHex;
+    exports.isTileField = isTileField;
+    exports.tileFieldSymbol = tileFieldSymbol;
+    exports.isSwiftGalleryLayout = isSwiftGalleryLayout;
+    exports.isGalleryLayout = isGalleryLayout;
+    exports.galleryLayoutSymbol = galleryLayoutSymbol;
+    exports.tileFieldsAvailable = tileFieldsAvailable;
+    exports.isAppearance = isAppearance;
+    exports.isShareStyle = isShareStyle;
+    exports.shareStyleSymbol = shareStyleSymbol;
+    exports.shareStyleTagline = shareStyleTagline;
+    exports.makeShareOptions = makeShareOptions;
+    exports.makeAppSettings = makeAppSettings;
+    exports.normalizeTileFields = normalizeTileFields;
+    exports.galleryOf = galleryOf;
+    exports.withGallery = withGallery;
+    exports.fieldsFor = fieldsFor;
+    exports.setFieldsFor = setFieldsFor;
+    exports.makeArchive = makeArchive;
+    exports.isRecordField = isRecordField;
+    exports.recordFieldTitle = recordFieldTitle;
+    exports.recordFieldSymbol = recordFieldSymbol;
+    exports.recordFieldIsMoney = recordFieldIsMoney;
+    exports.recordFieldIsPrivate = recordFieldIsPrivate;
+    exports.recordFieldIsOptionalMoney = recordFieldIsOptionalMoney;
+    exports.recordHasField = recordHasField;
+    exports.isFallbackType = isFallbackType;
+    exports.makeRecordType = makeRecordType;
+    exports.copyRecordType = copyRecordType;
+    exports.builtInTypeID = builtInTypeID;
+    exports.defaultFields = defaultFields;
+    exports.builtInRecordType = builtInRecordType;
+    exports.builtInRecordTypes = builtInRecordTypes;
+    exports.sanitizeRecordType = sanitizeRecordType;
+    exports.recordTypeShows = recordTypeShows;
+    exports.recordTypeEquals = recordTypeEquals;
+    exports.makeRecordTypeCatalog = makeRecordTypeCatalog;
+    exports.catalogPresets = catalogPresets;
+    exports.catalogIsHidden = catalogIsHidden;
+    exports.catalogFallbackKind = catalogFallbackKind;
+    exports.catalogType = catalogType;
+    exports.catalogResolve = catalogResolve;
+    exports.catalogBuiltIn = catalogBuiltIn;
+    const uuid_1 = require("./uuid");
+    // MARK: - EventKind
+    exports.EventKind = {
+        concert: '演唱会',
+        film: '电影',
+        theatre: '戏剧',
+        musical: '音乐剧',
+        live: 'Livehouse',
+        festival: '音乐节',
+        exhibition: '展览',
+        other: '其他',
+    };
+    /** `EventKind.allCases` 的顺序。 */
+    exports.EVENT_KINDS = [
+        exports.EventKind.concert,
+        exports.EventKind.film,
+        exports.EventKind.theatre,
+        exports.EventKind.musical,
+        exports.EventKind.live,
+        exports.EventKind.festival,
+        exports.EventKind.exhibition,
+        exports.EventKind.other,
+    ];
+    function isEventKind(value) {
+        return typeof value === 'string' && exports.EVENT_KINDS.includes(value);
+    }
+    const KIND_SYMBOLS = {
+        演唱会: 'waveform',
+        电影: 'film',
+        戏剧: 'theatermasks',
+        音乐剧: 'music.note',
+        Livehouse: 'guitars',
+        音乐节: 'sun.max',
+        展览: 'photo.artframe',
+        其他: 'sparkles',
+    };
+    const KIND_ENGLISH = {
+        演唱会: 'CONCERT',
+        电影: 'FILM',
+        戏剧: 'THEATRE',
+        音乐剧: 'MUSICAL',
+        Livehouse: 'LIVE',
+        音乐节: 'FESTIVAL',
+        展览: 'EXHIBITION',
+        其他: 'EVENT',
+    };
+    function eventKindSymbol(kind) {
+        return KIND_SYMBOLS[kind];
+    }
+    function eventKindEnglish(kind) {
+        return KIND_ENGLISH[kind];
+    }
+    // MARK: - RecordStatus
+    exports.RecordStatus = {
+        attended: '看过',
+        upcoming: '待赴约',
+        wishlist: '心愿单',
+        cancelled: '已取消',
+    };
+    exports.RECORD_STATUSES = [
+        exports.RecordStatus.attended,
+        exports.RecordStatus.upcoming,
+        exports.RecordStatus.wishlist,
+        exports.RecordStatus.cancelled,
+    ];
+    function isRecordStatus(value) {
+        return typeof value === 'string' && exports.RECORD_STATUSES.includes(value);
+    }
+    // MARK: - CoverArt
+    exports.CoverArt = {
+        orbit: 'orbit',
+        bloom: 'bloom',
+        curtain: 'curtain',
+        wave: 'wave',
+        sunset: 'sunset',
+        geometry: 'geometry',
+    };
+    exports.COVER_ARTS = [
+        exports.CoverArt.orbit,
+        exports.CoverArt.bloom,
+        exports.CoverArt.curtain,
+        exports.CoverArt.wave,
+        exports.CoverArt.sunset,
+        exports.CoverArt.geometry,
+    ];
+    function isCoverArt(value) {
+        return typeof value === 'string' && exports.COVER_ARTS.includes(value);
+    }
+    /** 新建这一种记录时的默认封面插画（Swift `EventKind.artwork`）。 */
+    function eventKindArtwork(kind) {
+        switch (kind) {
+            case exports.EventKind.film:
+                return exports.CoverArt.orbit;
+            case exports.EventKind.theatre:
+            case exports.EventKind.musical:
+                return exports.CoverArt.curtain;
+            case exports.EventKind.exhibition:
+                return exports.CoverArt.geometry;
+            case exports.EventKind.festival:
+                return exports.CoverArt.bloom;
+            default:
+                return exports.CoverArt.wave;
+        }
+    }
+    exports.EventReminderPurpose = {
+        start: '开演',
+        ticketSale: '抢票',
+        other: '其他',
+    };
+    exports.EVENT_REMINDER_PURPOSES = [
+        exports.EventReminderPurpose.start,
+        exports.EventReminderPurpose.ticketSale,
+        exports.EventReminderPurpose.other,
+    ];
+    function venueHasCoordinate(location) {
+        return location.latitude !== undefined && location.longitude !== undefined;
+    }
+    /** `[城市, 场馆]` 去空白后用空格连起来，两端共用同一把尺。 */
+    function venueQuery(city, venue) {
+        return [city, venue]
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0)
+            .join(' ');
+    }
+    /** 名字折叠：大小写与全角半角算同一个地点（Swift `ArtistName.key`）。 */
+    function placeNameKey(name) {
+        return name.trim().normalize('NFKC').toLowerCase();
+    }
+    /** 最多留几条最近场馆。 */
+    exports.RECENT_VENUE_LIMIT = 20;
+    /** 空名字丢掉、折叠后重名只留第一条、最多 20 条；`undefined` 原样返回。 */
+    function sanitizeRecentVenues(list) {
+        var _a;
+        if (list === undefined)
+            return undefined;
+        const seen = new Set();
+        const kept = [];
+        for (const item of list) {
+            const name = ((_a = item === null || item === void 0 ? void 0 : item.name) !== null && _a !== void 0 ? _a : '').trim();
+            const key = placeNameKey(name);
+            if (key.length === 0 || seen.has(key))
+                continue;
+            seen.add(key);
+            kept.push({ name });
+            if (kept.length === exports.RECENT_VENUE_LIMIT)
+                break;
+        }
+        return kept;
+    }
+    /** 刚用过的场馆放到最前面。 */
+    function addingRecentVenue(name, list) {
+        var _a;
+        const trimmed = name.trim();
+        const key = placeNameKey(trimmed);
+        if (key.length === 0)
+            return list;
+        const existing = (_a = sanitizeRecentVenues(list)) !== null && _a !== void 0 ? _a : [];
+        return [{ name: trimmed }, ...existing.filter((item) => placeNameKey(item.name) !== key)].slice(0, exports.RECENT_VENUE_LIMIT);
+    }
+    /** 新记录的全部默认值，和 Swift 的属性默认值一一对应。 */
+    function makeEventRecord(overrides = {}, options = {}) {
+        var _a, _b;
+        const newID = (_a = options.newID) !== null && _a !== void 0 ? _a : uuid_1.randomUUID;
+        const now = (_b = options.now) !== null && _b !== void 0 ? _b : (() => new Date());
+        const stamp = now();
+        return {
+            id: newID(),
+            title: '',
+            subtitle: '',
+            kind: exports.EventKind.concert,
+            status: exports.RecordStatus.attended,
+            date: stamp,
+            city: '',
+            venue: '',
+            seat: '',
+            currency: 'CNY',
+            performers: '',
+            director: '',
+            durationMinutes: 0,
+            language: '',
+            format: '',
+            companions: '',
+            rating: 0,
+            mood: '',
+            note: '',
+            quote: '',
+            setlist: '',
+            reminders: [],
+            tags: [],
+            collection: '',
+            sourceURL: '',
+            sourceName: '',
+            coverURL: '',
+            artwork: exports.CoverArt.orbit,
+            photos: [],
+            extraFields: [],
+            favorite: false,
+            createdAt: stamp,
+            updatedAt: stamp,
+            ...overrides,
+        };
+    }
+    function makeExtraField(overrides = {}, options = {}) {
+        var _a;
+        return { id: ((_a = options.newID) !== null && _a !== void 0 ? _a : uuid_1.randomUUID)(), key: '', value: '', ...overrides };
+    }
+    function makeMemoryPhoto(overrides = {}, options = {}) {
+        var _a;
+        return {
+            id: ((_a = options.newID) !== null && _a !== void 0 ? _a : uuid_1.randomUUID)(),
+            data: new Uint8Array(0),
+            caption: '',
+            ...overrides,
+        };
+    }
+    function makeEventReminder(overrides, options = {}) {
+        var _a;
+        return {
+            id: ((_a = options.newID) !== null && _a !== void 0 ? _a : uuid_1.randomUUID)(),
+            purpose: exports.EventReminderPurpose.start,
+            enabled: true,
+            ...overrides,
+        };
+    }
+    // MARK: - EventRecord 的派生量
+    function hasConfirmedDate(record) {
+        return record.dateUnconfirmed !== true;
+    }
+    function hasConfirmedTime(record) {
+        return hasConfirmedDate(record) && record.timeUnconfirmed !== true;
+    }
+    function acceptsReminders(record) {
+        return record.status === exports.RecordStatus.upcoming || record.status === exports.RecordStatus.wishlist;
+    }
+    function locationLine(record) {
+        return [record.city, record.venue].filter((value) => value.length > 0).join(' · ');
+    }
+    function searchableText(record) {
+        return [
+            record.title,
+            record.subtitle,
+            record.city,
+            record.venue,
+            record.performers,
+            record.director,
+            record.note,
+            record.quote,
+            record.collection,
+            record.companions,
+            record.kind,
+            ...record.tags,
+            ...record.extraFields.flatMap((field) => [field.key, field.value]),
+        ].join(' ');
+    }
+    /** 活动自己的时区偏移（秒）。没有 `sourceUTCOffset` 就是本机时区。 */
+    function eventTimeZoneOffsetSeconds(record, at = record.date) {
+        if (record.sourceUTCOffset !== undefined && Number.isFinite(record.sourceUTCOffset)) {
+            return record.sourceUTCOffset;
+        }
+        // JS 的 getTimezoneOffset 是「本地减 UTC 的负数分钟」。
+        return -at.getTimezoneOffset() * 60;
+    }
+    /** 一个时刻在活动时区里的年月日时分秒。 */
+    function eventDateParts(record, value = record.date) {
+        if (record.sourceUTCOffset === undefined || !Number.isFinite(record.sourceUTCOffset)) {
+            return {
+                year: value.getFullYear(),
+                month: value.getMonth() + 1,
+                day: value.getDate(),
+                hour: value.getHours(),
+                minute: value.getMinutes(),
+                second: value.getSeconds(),
+            };
+        }
+        const shifted = new Date(value.getTime() + record.sourceUTCOffset * 1000);
+        return {
+            year: shifted.getUTCFullYear(),
+            month: shifted.getUTCMonth() + 1,
+            day: shifted.getUTCDate(),
+            hour: shifted.getUTCHours(),
+            minute: shifted.getUTCMinutes(),
+            second: shifted.getUTCSeconds(),
+        };
+    }
+    /**
+     * 日记里那一天：按**活动时区**取年月日，再按**本机时区**落到当天零点。
+     * 在家看一场海外演出时，日历上仍然是当地的那一天。
+     */
+    function calendarDay(record) {
+        const parts = eventDateParts(record);
+        return new Date(parts.year, parts.month - 1, parts.day);
+    }
+    /**
+     * 这一场算作开始的时刻。时间没确认时存下来的钟点只是占位，
+     * 于是整个活动日都还在前面。
+     */
+    function startsBy(record) {
+        if (hasConfirmedTime(record))
+            return record.date;
+        const parts = eventDateParts(record);
+        const offset = eventTimeZoneOffsetSeconds(record);
+        // 活动时区的次日零点。
+        const midnightUTC = Date.UTC(parts.year, parts.month - 1, parts.day + 1);
+        return new Date(midnightUTC - offset * 1000);
+    }
+    /** 曲目文本里的一行：换行拍平，两端去空白。 */
+    function setlistTrackLine(track) {
+        return track.title
+            .split(/\r\n|\r|\n/)
+            .map((piece) => piece.trim())
+            .filter((piece) => piece.length > 0)
+            .join(' ');
+    }
+    /** 行号：补到两位，超过两位不截断。 */
+    function setlistTrackNumber(index) {
+        return String(index).padStart(2, '0');
+    }
+    exports.SETLIST_PREVIEW_COUNT = 12;
+    function setlistPreview(songs, expanded) {
+        return expanded || songs.length <= exports.SETLIST_PREVIEW_COUNT
+            ? songs
+            : songs.slice(0, exports.SETLIST_PREVIEW_COUNT);
+    }
+    /**
+     * 正在编辑的文本与已保存的曲目配对：匹配上的消耗掉那一条，
+     * 于是同一首歌唱两次也分得开。1.8 那种还是地址的行按 `legacyURL` 配。
+     */
+    function reconcileSetlist(text, saved) {
+        const remaining = [...saved];
+        const result = [];
+        for (const raw of text.split(/\r\n|\r|\n/)) {
+            const line = raw.trim();
+            if (line.length === 0)
+                continue;
+            const index = remaining.findIndex((track) => setlistTrackLine(track) === line || track.legacyURL === line);
+            if (index >= 0)
+                result.push(remaining.splice(index, 1)[0]);
+            else
+                result.push({ title: line });
+        }
+        return result;
+    }
+    function songs(record) {
+        var _a;
+        return reconcileSetlist(record.setlist, (_a = record.setlistTracks) !== null && _a !== void 0 ? _a : []);
+    }
+    /** 应用愿意打开的地址：http(s)、有主机名、不带用户名密码（Swift `LinkURL.valid`）。 */
+    function isValidLink(value) {
+        const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^/?#]*)/.exec(value.trim());
+        if (!match)
+            return false;
+        const scheme = match[1].toLowerCase();
+        if (scheme !== 'http' && scheme !== 'https')
+            return false;
+        const authority = match[2];
+        if (authority.includes('@'))
+            return false; // 用户名 / 密码
+        return authority.length > 0;
+    }
+    /** 这份曲目是从哪个歌单导入的，且它仍读得出是个能打开的地址。 */
+    function setlistLink(record) {
+        const value = record.setlistSourceURL;
+        if (value === undefined)
+            return undefined;
+        return isValidLink(value) ? value.trim() : undefined;
+    }
+    // MARK: - AccentTheme
+    exports.AccentTheme = {
+        lilac: '鸢尾紫',
+        green: '苔藓绿',
+        coral: '珊瑚橘',
+        blue: '远山蓝',
+    };
+    exports.ACCENT_THEMES = [
+        exports.AccentTheme.lilac,
+        exports.AccentTheme.green,
+        exports.AccentTheme.coral,
+        exports.AccentTheme.blue,
+    ];
+    function isAccentTheme(value) {
+        return typeof value === 'string' && exports.ACCENT_THEMES.includes(value);
+    }
+    /** 印刷用的主题色（海报、回顾卡、导出、小组件）。 */
+    const ACCENT_HEX = {
+        鸢尾紫: '#bba7ef',
+        苔藓绿: '#d8eb97',
+        珊瑚橘: '#f4ab8e',
+        远山蓝: '#adcfe5',
+    };
+    /** 同色相的深一档，纸上能当字和线（Swift `AccentTheme.deepHex`）。 */
+    const ACCENT_DEEP_HEX = {
+        鸢尾紫: '#6e58a8',
+        苔藓绿: '#5e7a32',
+        珊瑚橘: '#c2603a',
+        远山蓝: '#3e6e8e',
+    };
+    /**
+     * 界面上的强调色（导航按钮、链接行、开关、统计柱）：浅色一档、深色一档。
+     * 浅色下珊瑚橘与苔藓绿比 `deep` 再深一点，是为了正文大小的对比度。
+     * 对应 Swift `AccentTheme.tintUIColor`。
+     */
+    const ACCENT_TINT = {
+        鸢尾紫: { light: '#6e58a8', dark: '#b3a0ea' },
+        苔藓绿: { light: '#5b7631', dark: '#a8c47a' },
+        珊瑚橘: { light: '#af5634', dark: '#ee9a7c' },
+        远山蓝: { light: '#3e6e8e', dark: '#8fbad8' },
+    };
+    function accentHex(accent) {
+        return ACCENT_HEX[accent];
+    }
+    function accentDeepHex(accent) {
+        return ACCENT_DEEP_HEX[accent];
+    }
+    function accentTintHex(accent, scheme) {
+        return ACCENT_TINT[accent][scheme];
+    }
+    // MARK: - TileField / GalleryLayout / Appearance
+    exports.TileField = {
+        kind: '类型',
+        date: '时间',
+        city: '城市',
+        venue: '场馆',
+        title: '标题',
+        rating: '评分',
+        attended: '已赴约',
+        favorite: '喜欢',
+        count: '场次',
+    };
+    exports.TILE_FIELDS = [
+        exports.TileField.kind,
+        exports.TileField.date,
+        exports.TileField.city,
+        exports.TileField.venue,
+        exports.TileField.title,
+        exports.TileField.rating,
+        exports.TileField.attended,
+        exports.TileField.favorite,
+        exports.TileField.count,
+    ];
+    function isTileField(value) {
+        return typeof value === 'string' && exports.TILE_FIELDS.includes(value);
+    }
+    const TILE_FIELD_SYMBOLS = {
+        类型: 'square.grid.2x2',
+        时间: 'calendar',
+        城市: 'mappin',
+        场馆: 'building.2',
+        标题: 'text.alignleft',
+        评分: 'star',
+        已赴约: 'checkmark.seal',
+        喜欢: 'heart',
+        场次: 'number',
+    };
+    function tileFieldSymbol(field) {
+        return TILE_FIELD_SYMBOLS[field];
+    }
+    exports.GalleryLayout = {
+        grid: '海报墙',
+        tickets: '票根剧场',
+        showcase: '展柜',
+        list: '极简列表',
+        calendar: '日历',
+        artists: '艺人',
+    };
+    exports.GALLERY_LAYOUTS = [
+        exports.GalleryLayout.grid,
+        exports.GalleryLayout.tickets,
+        exports.GalleryLayout.showcase,
+        exports.GalleryLayout.list,
+        exports.GalleryLayout.calendar,
+        exports.GalleryLayout.artists,
+    ];
+    /**
+     * 1.9 及更早的 `AppSettings.layout` 只认得这四个。日历与艺人是这一版新增的读法，
+     * 各有自己的布尔键（`homeCalendar` / `artistWall`），于是旧版本读到新档案不会整份打不开。
+     */
+    exports.SWIFT_GALLERY_LAYOUTS = [
+        exports.GalleryLayout.grid,
+        exports.GalleryLayout.tickets,
+        exports.GalleryLayout.showcase,
+        exports.GalleryLayout.list,
+    ];
+    function isSwiftGalleryLayout(value) {
+        return typeof value === 'string' && exports.SWIFT_GALLERY_LAYOUTS.includes(value);
+    }
+    function isGalleryLayout(value) {
+        return typeof value === 'string' && exports.GALLERY_LAYOUTS.includes(value);
+    }
+    const GALLERY_SYMBOLS = {
+        海报墙: 'square.grid.2x2',
+        票根剧场: 'ticket',
+        展柜: 'rectangle.portrait.on.rectangle.portrait.angled',
+        极简列表: 'list.bullet',
+        日历: 'calendar',
+        艺人: 'person.2',
+    };
+    function galleryLayoutSymbol(layout) {
+        return GALLERY_SYMBOLS[layout];
+    }
+    /** 每种版式上能开能关的项。 */
+    function tileFieldsAvailable(layout) {
+        switch (layout) {
+            case exports.GalleryLayout.grid:
+                return [
+                    exports.TileField.kind,
+                    exports.TileField.date,
+                    exports.TileField.city,
+                    exports.TileField.title,
+                    exports.TileField.rating,
+                    exports.TileField.attended,
+                    exports.TileField.favorite,
+                ];
+            case exports.GalleryLayout.artists:
+                return [exports.TileField.count];
+            // 日历上每一行印的是日记行，印哪几项不由这里开关。
+            case exports.GalleryLayout.calendar:
+                return [];
+            default:
+                return [
+                    exports.TileField.kind,
+                    exports.TileField.date,
+                    exports.TileField.city,
+                    exports.TileField.venue,
+                    exports.TileField.title,
+                    exports.TileField.rating,
+                    exports.TileField.attended,
+                    exports.TileField.favorite,
+                ];
+        }
+    }
+    exports.Appearance = {
+        light: '纸白',
+        dark: '夜幕',
+        system: '跟随系统',
+    };
+    exports.APPEARANCES = [
+        exports.Appearance.light,
+        exports.Appearance.dark,
+        exports.Appearance.system,
+    ];
+    function isAppearance(value) {
+        return typeof value === 'string' && exports.APPEARANCES.includes(value);
+    }
+    // MARK: - ShareStyle / ShareOptions
+    exports.ShareStyle = {
+        ticket: '经典票根',
+        magazine: '杂志封面',
+        cinema: '电影字幕',
+        poster: '艺术海报',
+        boarding: '登机牌',
+        journal: '手帐拼贴',
+        vinyl: '黑胶唱片',
+        receipt: '回忆小票',
+        minimal: '极简留白',
+    };
+    exports.SHARE_STYLES = [
+        exports.ShareStyle.ticket,
+        exports.ShareStyle.magazine,
+        exports.ShareStyle.cinema,
+        exports.ShareStyle.poster,
+        exports.ShareStyle.boarding,
+        exports.ShareStyle.journal,
+        exports.ShareStyle.vinyl,
+        exports.ShareStyle.receipt,
+        exports.ShareStyle.minimal,
+    ];
+    function isShareStyle(value) {
+        return typeof value === 'string' && exports.SHARE_STYLES.includes(value);
+    }
+    const SHARE_STYLE_SYMBOLS = {
+        经典票根: 'ticket',
+        杂志封面: 'book.closed',
+        电影字幕: 'film',
+        艺术海报: 'photo.artframe',
+        登机牌: 'airplane.departure',
+        手帐拼贴: 'book.pages',
+        黑胶唱片: 'opticaldisc',
+        回忆小票: 'receipt',
+        极简留白: 'square',
+    };
+    const SHARE_STYLE_TAGLINES = {
+        经典票根: 'ADMIT ONE',
+        杂志封面: 'COVER STORY',
+        电影字幕: 'NOW SHOWING',
+        艺术海报: 'CULTURE CLUB',
+        登机牌: 'BOARDING PASS',
+        手帐拼贴: 'DEAR DIARY',
+        黑胶唱片: 'SIDE A',
+        回忆小票: 'PAID IN FULL',
+        极简留白: 'THE EDIT',
+    };
+    function shareStyleSymbol(style) {
+        return SHARE_STYLE_SYMBOLS[style];
+    }
+    function shareStyleTagline(style) {
+        return SHARE_STYLE_TAGLINES[style];
+    }
+    function makeShareOptions(overrides = {}) {
+        return {
+            style: exports.ShareStyle.ticket,
+            accent: exports.AccentTheme.lilac,
+            showDate: true,
+            showVenue: true,
+            showRating: true,
+            showNote: true,
+            showQuote: true,
+            showSetlist: true,
+            showAuthor: true,
+            showPrice: false,
+            showSeat: false,
+            showCompanions: false,
+            showCustomPrivate: false,
+            headline: '',
+            ...overrides,
+        };
+    }
+    /** 1.6 及更早发过的默认签名；只有用户自己写的句子才留下。 */
+    exports.LEGACY_SIGNATURE = '为值得的瞬间，留一点余响。';
+    function makeAppSettings(overrides = {}) {
+        return {
+            name: '收藏家',
+            signature: '',
+            accent: exports.AccentTheme.lilac,
+            layout: exports.GalleryLayout.grid,
+            artistWall: false,
+            homeCalendar: false,
+            // 没选过就跟着系统走。这只是「键缺席时读什么」：老档案与备份里显式存下的
+            // 「纸白」「夜幕」照旧原样读出来（见 `decodeSettingsJSON`），写出去也照旧带这个键。
+            appearance: exports.Appearance.system,
+            soundEnabled: true,
+            hapticsEnabled: true,
+            motionEnabled: true,
+            showRatings: true,
+            listTimeline: true,
+            showPinBadge: true,
+            gridColumns: 2,
+            tileFields: [...exports.TILE_FIELDS],
+            ticketFields: [...exports.TILE_FIELDS],
+            showcaseFields: [...exports.TILE_FIELDS],
+            listFields: [...exports.TILE_FIELDS],
+            artistFields: [...exports.TILE_FIELDS],
+            osmGeocoding: true,
+            defaultKind: exports.EventKind.concert,
+            favoriteShareStyle: exports.ShareStyle.ticket,
+            remindersEnabled: false,
+            reminderHour: 9,
+            ...overrides,
+        };
+    }
+    /** 去重并按 `TILE_FIELDS` 的顺序排好，Set 在这一层就是有序数组。 */
+    function normalizeTileFields(values) {
+        const set = new Set(values);
+        return exports.TILE_FIELDS.filter((field) => set.has(field));
+    }
+    /** 首页现在读的是哪一面墙：`layout`，除非日历或艺人墙开着。 */
+    function galleryOf(settings) {
+        if (settings.homeCalendar)
+            return exports.GalleryLayout.calendar;
+        return settings.artistWall ? exports.GalleryLayout.artists : settings.layout;
+    }
+    /** 设置展示版式，三个键同时保持一致，`layout` 里永远不会留下旧版本读不了的值。 */
+    function withGallery(settings, value) {
+        const next = {
+            ...settings,
+            artistWall: value === exports.GalleryLayout.artists,
+            homeCalendar: value === exports.GalleryLayout.calendar,
+        };
+        if (isSwiftGalleryLayout(value))
+            next.layout = value;
+        return next;
+    }
+    /** 这一版式现在印哪些项：存下来的那一份与这一版式有的项求交集。 */
+    function fieldsFor(settings, layout) {
+        const stored = (() => {
+            switch (layout) {
+                case exports.GalleryLayout.grid:
+                    return settings.tileFields;
+                case exports.GalleryLayout.tickets:
+                    return settings.ticketFields;
+                case exports.GalleryLayout.showcase:
+                    return settings.showcaseFields;
+                case exports.GalleryLayout.list:
+                case exports.GalleryLayout.calendar:
+                    return settings.listFields;
+                case exports.GalleryLayout.artists:
+                    return settings.artistFields;
+            }
+        })();
+        const available = new Set(tileFieldsAvailable(layout));
+        return normalizeTileFields(stored).filter((field) => available.has(field));
+    }
+    function setFieldsFor(settings, value, layout) {
+        const fields = normalizeTileFields(value);
+        switch (layout) {
+            case exports.GalleryLayout.grid:
+                return { ...settings, tileFields: fields };
+            case exports.GalleryLayout.tickets:
+                return { ...settings, ticketFields: fields };
+            case exports.GalleryLayout.showcase:
+                return { ...settings, showcaseFields: fields };
+            case exports.GalleryLayout.list:
+            case exports.GalleryLayout.calendar:
+                return { ...settings, listFields: fields };
+            case exports.GalleryLayout.artists:
+                return { ...settings, artistFields: fields };
+        }
+    }
+    exports.ARCHIVE_VERSION = 2;
+    function makeArchive(overrides = {}) {
+        return {
+            version: exports.ARCHIVE_VERSION,
+            records: [],
+            settings: makeAppSettings(),
+            hasOnboarded: false,
+            isDemo: false,
+            ...overrides,
+        };
+    }
+    // MARK: - RecordField
+    exports.RecordField = {
+        performers: 'performers',
+        director: 'director',
+        duration: 'duration',
+        language: 'language',
+        format: 'format',
+        endDate: 'endDate',
+        seat: 'seat',
+        price: 'price',
+        facePrice: 'facePrice',
+        extraCost: 'extraCost',
+        companions: 'companions',
+        mood: 'mood',
+        quote: 'quote',
+        setlist: 'setlist',
+        collection: 'collection',
+    };
+    /** `RecordField.allCases` 的顺序，`sanitizeRecordType` 按它排序。 */
+    exports.RECORD_FIELDS = [
+        exports.RecordField.performers,
+        exports.RecordField.director,
+        exports.RecordField.duration,
+        exports.RecordField.language,
+        exports.RecordField.format,
+        exports.RecordField.endDate,
+        exports.RecordField.seat,
+        exports.RecordField.price,
+        exports.RecordField.facePrice,
+        exports.RecordField.extraCost,
+        exports.RecordField.companions,
+        exports.RecordField.mood,
+        exports.RecordField.quote,
+        exports.RecordField.setlist,
+        exports.RecordField.collection,
+    ];
+    function isRecordField(value) {
+        return typeof value === 'string' && exports.RECORD_FIELDS.includes(value);
+    }
+    const RECORD_FIELD_TITLES = {
+        performers: '演出者',
+        director: '导演',
+        duration: '时长',
+        language: '语言',
+        format: '版本',
+        endDate: '结束时间',
+        seat: '座位',
+        price: '实付',
+        facePrice: '票面价',
+        extraCost: '其他花费',
+        companions: '同行人',
+        mood: '心情',
+        quote: '金句',
+        setlist: '曲目',
+        collection: '专辑',
+    };
+    const RECORD_FIELD_SYMBOLS = {
+        performers: 'person.2',
+        director: 'megaphone',
+        duration: 'clock',
+        language: 'globe',
+        format: 'sparkles.tv',
+        endDate: 'calendar.badge.plus',
+        seat: 'chair',
+        price: 'yensign',
+        facePrice: 'ticket',
+        extraCost: 'tram',
+        companions: 'figure.2',
+        mood: 'face.smiling',
+        quote: 'quote.opening',
+        setlist: 'music.note.list',
+        collection: 'square.stack',
+    };
+    function recordFieldTitle(field) {
+        return RECORD_FIELD_TITLES[field];
+    }
+    function recordFieldSymbol(field) {
+        return RECORD_FIELD_SYMBOLS[field];
+    }
+    /** 三个金额。一个分享开关、一个导出开关管全部。 */
+    function recordFieldIsMoney(field) {
+        return (field === exports.RecordField.price ||
+            field === exports.RecordField.facePrice ||
+            field === exports.RecordField.extraCost);
+    }
+    /** 座位、三个金额、同行人：任何输出默认不含。 */
+    function recordFieldIsPrivate(field) {
+        return field === exports.RecordField.seat || recordFieldIsMoney(field) || field === exports.RecordField.companions;
+    }
+    /** 要用户自己打开的两个金额，任何类型都不默认提供。 */
+    function recordFieldIsOptionalMoney(field) {
+        return field === exports.RecordField.facePrice || field === exports.RecordField.extraCost;
+    }
+    /** 这条记录已经为这个词条填过东西了吗。 */
+    function recordHasField(record, field) {
+        var _a;
+        switch (field) {
+            case exports.RecordField.performers:
+                return record.performers.length > 0;
+            case exports.RecordField.director:
+                return record.director.length > 0;
+            case exports.RecordField.duration:
+                return record.durationMinutes > 0;
+            case exports.RecordField.language:
+                return record.language.length > 0;
+            case exports.RecordField.format:
+                return record.format.length > 0;
+            case exports.RecordField.endDate:
+                return record.endDate !== undefined;
+            case exports.RecordField.seat:
+                return record.seat.length > 0;
+            case exports.RecordField.price:
+                return record.price !== undefined;
+            case exports.RecordField.facePrice:
+                return record.facePrice !== undefined;
+            case exports.RecordField.extraCost:
+                return record.extraCost !== undefined || ((_a = record.extraCostNote) !== null && _a !== void 0 ? _a : '').length > 0;
+            case exports.RecordField.companions:
+                return record.companions.length > 0;
+            case exports.RecordField.mood:
+                return record.mood.length > 0;
+            case exports.RecordField.quote:
+                return record.quote.length > 0;
+            case exports.RecordField.setlist:
+                return record.setlist.length > 0;
+            case exports.RecordField.collection:
+                return record.collection.length > 0;
+        }
+    }
+    /** 唯一不会消失的类型：类型被删掉时记录都回到它这里。 */
+    function isFallbackType(type) {
+        return type.isBuiltIn && type.base === exports.EventKind.other;
+    }
+    function makeRecordType(values, options = {}) {
+        var _a;
+        return {
+            id: ((_a = options.newID) !== null && _a !== void 0 ? _a : uuid_1.randomUUID)(),
+            isBuiltIn: false,
+            artwork: exports.CoverArt.wave,
+            fields: [],
+            entries: [],
+            ...values,
+        };
+    }
+    /** 从预设复制一个用户类型：外观与词条相同，id 是自己的。 */
+    function copyRecordType(type, options = {}) {
+        var _a;
+        return {
+            id: ((_a = options.newID) !== null && _a !== void 0 ? _a : uuid_1.randomUUID)(),
+            base: type.base,
+            isBuiltIn: false,
+            name: type.name,
+            english: type.english,
+            symbol: type.symbol,
+            artwork: type.artwork,
+            fields: [...type.fields],
+            entries: [...type.entries],
+        };
+    }
+    /**
+     * 每种内建类型的固定 id：由种类名的 SHA-256 派生（写成版本 5 的形状）。
+     * 跨设备与重装保持不变，改过名的内建仍能和指向它的记录对上。
+     */
+    function builtInTypeID(kind) {
+        return (0, uuid_1.derivedUUID)('encore.recordtype.' + kind);
+    }
+    /** 一种内建类型默认摆出哪些词条。 */
+    function defaultFields(kind) {
+        const money = [exports.RecordField.seat, exports.RecordField.price, exports.RecordField.companions];
+        const feeling = [exports.RecordField.mood, exports.RecordField.quote, exports.RecordField.collection];
+        switch (kind) {
+            case exports.EventKind.concert:
+                return [exports.RecordField.performers, exports.RecordField.endDate, exports.RecordField.setlist, ...money, ...feeling];
+            case exports.EventKind.live:
+                return [exports.RecordField.performers, exports.RecordField.setlist, ...money, ...feeling];
+            case exports.EventKind.festival:
+                return [exports.RecordField.performers, exports.RecordField.endDate, exports.RecordField.setlist, ...money, ...feeling];
+            case exports.EventKind.film:
+                return [
+                    exports.RecordField.director,
+                    exports.RecordField.performers,
+                    exports.RecordField.duration,
+                    exports.RecordField.language,
+                    exports.RecordField.format,
+                    ...money,
+                    ...feeling,
+                ];
+            case exports.EventKind.theatre:
+                return [
+                    exports.RecordField.performers,
+                    exports.RecordField.director,
+                    exports.RecordField.duration,
+                    exports.RecordField.language,
+                    ...money,
+                    ...feeling,
+                ];
+            case exports.EventKind.musical:
+                return [
+                    exports.RecordField.performers,
+                    exports.RecordField.director,
+                    exports.RecordField.duration,
+                    exports.RecordField.language,
+                    exports.RecordField.setlist,
+                    ...money,
+                    ...feeling,
+                ];
+            case exports.EventKind.exhibition:
+                return [
+                    exports.RecordField.duration,
+                    exports.RecordField.language,
+                    exports.RecordField.endDate,
+                    ...money,
+                    ...feeling,
+                ];
+            case exports.EventKind.other:
+                return exports.RECORD_FIELDS.filter((field) => !recordFieldIsOptionalMoney(field));
+        }
+    }
+    function builtInRecordType(kind) {
+        return {
+            id: builtInTypeID(kind),
+            base: kind,
+            isBuiltIn: true,
+            name: kind,
+            english: eventKindEnglish(kind),
+            symbol: eventKindSymbol(kind),
+            artwork: eventKindArtwork(kind),
+            fields: defaultFields(kind),
+            entries: [],
+        };
+    }
+    function builtInRecordTypes() {
+        return exports.EVENT_KINDS.map(builtInRecordType);
+    }
+    /** 按码点数截断，中日韩字符与 Swift 的 `String.prefix` 结果一致。 */
+    function truncate(value, limit) {
+        return Array.from(value).slice(0, limit).join('');
+    }
+    /**
+     * 每张卡与每个选择器要排的字都有上限，重复的去掉。
+     * 恢复备份前每个类型都过一次这里，`validateArchive` 也按它校验。
+     */
+    function sanitizeRecordType(type) {
+        var _a;
+        const name = truncate(type.name.trim(), 12) || type.base;
+        const english = truncate(type.english.trim(), 16).toUpperCase() || eventKindEnglish(type.base);
+        const symbol = type.symbol.trim().length === 0 ? eventKindSymbol(type.base) : type.symbol;
+        const has = new Set(type.fields);
+        const fields = exports.RECORD_FIELDS.filter((field) => has.has(field));
+        const seen = new Set();
+        const entries = [];
+        const entryDefinitionIds = [];
+        for (const [index, entry] of type.entries.entries()) {
+            const value = truncate(entry.trim(), 20);
+            if (value.length === 0 || seen.has(value))
+                continue;
+            seen.add(value);
+            entries.push(value);
+            if (type.entryDefinitionIds)
+                entryDefinitionIds.push((_a = (0, uuid_1.normalizeUUID)(type.entryDefinitionIds[index])) !== null && _a !== void 0 ? _a : (0, uuid_1.derivedUUID)(`livemark.custom-field:${type.id}:${value}`));
+            if (entries.length === 8)
+                break;
+        }
+        return { ...type, name, english, symbol, fields, entries, ...(type.entryDefinitionIds ? { entryDefinitionIds } : {}) };
+    }
+    function recordTypeShows(type, field) {
+        return type.fields.includes(field);
+    }
+    /** 两个类型逐字段相等（`validateArchive` 用它比对 `sanitized`）。 */
+    function recordTypeEquals(a, b) {
+        return (a.id === b.id &&
+            a.base === b.base &&
+            a.isBuiltIn === b.isBuiltIn &&
+            a.name === b.name &&
+            a.english === b.english &&
+            a.symbol === b.symbol &&
+            a.artwork === b.artwork &&
+            a.fields.length === b.fields.length &&
+            a.fields.every((field, index) => field === b.fields[index]) &&
+            a.entries.length === b.entries.length &&
+            a.entries.every((entry, index) => entry === b.entries[index]));
+    }
+    /**
+     * 存下来的类型在前（用户自己的顺序），没动过的内建补在后面。
+     * 旧档案解出来正好是那八种。
+     */
+    function makeRecordTypeCatalog(stored, hidden = undefined) {
+        const hiddenSet = new Set(hidden !== null && hidden !== void 0 ? hidden : []);
+        const kept = (stored !== null && stored !== void 0 ? stored : []).filter((type) => !(type.isBuiltIn && hiddenSet.has(type.id)));
+        const customised = new Set(kept.filter((type) => type.isBuiltIn).map((type) => type.id));
+        const missing = builtInRecordTypes().filter((type) => !customised.has(type.id) && !hiddenSet.has(type.id));
+        return { types: [...kept, ...missing] };
+    }
+    exports.BUILT_IN_CATALOG = { types: builtInRecordTypes() };
+    /** 新类型能从哪些预设起步：每种内建，带上用户自己的改动。 */
+    function catalogPresets(catalog) {
+        return exports.EVENT_KINDS.map((kind) => catalogBuiltIn(catalog, kind));
+    }
+    function catalogIsHidden(catalog, kind) {
+        return !catalog.types.some((type) => type.isBuiltIn && type.base === kind);
+    }
+    /** 类型被删掉时记录落到哪种种类。 */
+    function catalogFallbackKind(catalog, kind) {
+        return catalogIsHidden(catalog, kind) ? exports.EventKind.other : kind;
+    }
+    function catalogType(catalog, id) {
+        if (id === undefined)
+            return undefined;
+        return catalog.types.find((type) => type.id === id);
+    }
+    /** 这条记录用哪个类型画：它指向的那个，否则它这种种类的内建，否则兜底。 */
+    function catalogResolve(catalog, record) {
+        var _a, _b;
+        return ((_b = (_a = catalogType(catalog, record.typeID)) !== null && _a !== void 0 ? _a : catalog.types.find((type) => type.isBuiltIn && type.base === record.kind)) !== null && _b !== void 0 ? _b : builtInRecordType(record.kind));
+    }
+    /** 某一种种类的内建类型，带上用户改过的名字。 */
+    function catalogBuiltIn(catalog, kind) {
+        var _a;
+        return ((_a = catalog.types.find((type) => type.isBuiltIn && type.base === kind)) !== null && _a !== void 0 ? _a : builtInRecordType(kind));
+    }
+
+  });
+
+  define("core/uuid", function (module, exports, require) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isUUID = isUUID;
+    exports.normalizeUUID = normalizeUUID;
+    exports.uuidFromBytes = uuidFromBytes;
+    exports.randomUUID = randomUUID;
+    exports.derivedUUID = derivedUUID;
+    // UUID：档案里一律是**大写连字符**形式（Swift `UUID.uuidString` 的写法）。
+    const sha256_1 = require("./sha256");
+    const PATTERN = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
+    function isUUID(value) {
+        return typeof value === 'string' && PATTERN.test(value);
+    }
+    /** 认得出就返回大写形式，认不出返回 `undefined`（宽松解码用）。 */
+    function normalizeUUID(value) {
+        return isUUID(value) ? value.toUpperCase() : undefined;
+    }
+    /** 16 字节转 UUID 字符串。 */
+    function uuidFromBytes(bytes) {
+        let hex = '';
+        for (let i = 0; i < 16; i += 1)
+            hex += bytes[i].toString(16).padStart(2, '0').toUpperCase();
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+    }
+    const defaultRandom = () => Math.random();
+    /** 版本 4 UUID。 */
+    function randomUUID(random = defaultRandom) {
+        const bytes = new Uint8Array(16);
+        for (let i = 0; i < 16; i += 1)
+            bytes[i] = Math.floor(random() * 256) & 0xff;
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        return uuidFromBytes(bytes);
+    }
+    /**
+     * 名字派生的 UUID，和 Swift `RecordType.builtInID` 逐字节一致：
+     * SHA-256 取前 16 字节，版本位写 5、variant 位写 RFC 4122。
+     *
+     * 注意它不是标准的版本 5（标准要先拼命名空间 UUID 再用 SHA-1）；这里照抄
+     * Swift 的算法，是为了让内建类型的 id 两端一模一样。
+     */
+    function derivedUUID(name) {
+        const digest = (0, sha256_1.sha256Bytes)((0, sha256_1.utf8Encode)(name)).slice(0, 16);
+        digest[6] = (digest[6] & 0x0f) | 0x50;
+        digest[8] = (digest[8] & 0x3f) | 0x80;
+        return uuidFromBytes(digest);
+    }
+
+  });
+
+  define("core/sha256", function (module, exports, require) {
+    "use strict";
+    // 纯 TypeScript 的 SHA-256。core 层不引入 expo-crypto，所以摘要在这里自己算；
+    // 需要平台实现时用 `HashFunction` 注入（见 repository.ts 的 `sha256` 参数）。
+    //
+    // 对应 Swift 的 `MediaAsset.digest`（`CryptoKit.SHA256`，小写十六进制）。
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.sha256Bytes = sha256Bytes;
+    exports.sha256Hex = sha256Hex;
+    exports.sha256Text = sha256Text;
+    exports.toHex = toHex;
+    exports.utf8Encode = utf8Encode;
+    exports.utf8Decode = utf8Decode;
+    const K = new Uint32Array([
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+    ]);
+    const HEX = '0123456789abcdef';
+    /** SHA-256 的原始 32 字节。 */
+    function sha256Bytes(input) {
+        const h = new Uint32Array([
+            0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+        ]);
+        const length = input.length;
+        // 填充：0x80，补零到 56 (mod 64)，再加 8 字节的位长度（大端）。
+        const withPadding = (((length + 8) >> 6) + 1) << 6;
+        const block = new Uint8Array(withPadding);
+        block.set(input);
+        block[length] = 0x80;
+        const bits = length * 8;
+        // 长度最多 2^53，高 32 位用除法算，避免 32 位移位溢出。
+        const high = Math.floor(bits / 0x100000000);
+        const low = bits >>> 0;
+        block[withPadding - 8] = (high >>> 24) & 0xff;
+        block[withPadding - 7] = (high >>> 16) & 0xff;
+        block[withPadding - 6] = (high >>> 8) & 0xff;
+        block[withPadding - 5] = high & 0xff;
+        block[withPadding - 4] = (low >>> 24) & 0xff;
+        block[withPadding - 3] = (low >>> 16) & 0xff;
+        block[withPadding - 2] = (low >>> 8) & 0xff;
+        block[withPadding - 1] = low & 0xff;
+        const w = new Uint32Array(64);
+        for (let offset = 0; offset < withPadding; offset += 64) {
+            for (let i = 0; i < 16; i += 1) {
+                const j = offset + i * 4;
+                w[i] = ((block[j] << 24) | (block[j + 1] << 16) | (block[j + 2] << 8) | block[j + 3]) >>> 0;
+            }
+            for (let i = 16; i < 64; i += 1) {
+                const a = w[i - 15];
+                const b = w[i - 2];
+                const s0 = (((a >>> 7) | (a << 25)) ^ ((a >>> 18) | (a << 14)) ^ (a >>> 3)) >>> 0;
+                const s1 = (((b >>> 17) | (b << 15)) ^ ((b >>> 19) | (b << 13)) ^ (b >>> 10)) >>> 0;
+                w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+            }
+            let [a, b, c, d, e, f, g, hh] = [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]];
+            for (let i = 0; i < 64; i += 1) {
+                const s1 = (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) >>> 0;
+                const ch = ((e & f) ^ (~e & g)) >>> 0;
+                const t1 = (hh + s1 + ch + K[i] + w[i]) >>> 0;
+                const s0 = (((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) >>> 0;
+                const maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+                const t2 = (s0 + maj) >>> 0;
+                hh = g;
+                g = f;
+                f = e;
+                e = (d + t1) >>> 0;
+                d = c;
+                c = b;
+                b = a;
+                a = (t1 + t2) >>> 0;
+            }
+            h[0] = (h[0] + a) >>> 0;
+            h[1] = (h[1] + b) >>> 0;
+            h[2] = (h[2] + c) >>> 0;
+            h[3] = (h[3] + d) >>> 0;
+            h[4] = (h[4] + e) >>> 0;
+            h[5] = (h[5] + f) >>> 0;
+            h[6] = (h[6] + g) >>> 0;
+            h[7] = (h[7] + hh) >>> 0;
+        }
+        const out = new Uint8Array(32);
+        for (let i = 0; i < 8; i += 1) {
+            out[i * 4] = (h[i] >>> 24) & 0xff;
+            out[i * 4 + 1] = (h[i] >>> 16) & 0xff;
+            out[i * 4 + 2] = (h[i] >>> 8) & 0xff;
+            out[i * 4 + 3] = h[i] & 0xff;
+        }
+        return out;
+    }
+    /** 小写十六进制摘要，和 Swift 的 `MediaAsset.digest` 一字不差。 */
+    function sha256Hex(input) {
+        return toHex(sha256Bytes(input));
+    }
+    /** UTF-8 文本的摘要。 */
+    function sha256Text(text) {
+        return sha256Hex(utf8Encode(text));
+    }
+    function toHex(bytes) {
+        let out = '';
+        for (let i = 0; i < bytes.length; i += 1) {
+            out += HEX[bytes[i] >> 4] + HEX[bytes[i] & 0x0f];
+        }
+        return out;
+    }
+    /** UTF-8 编码，不依赖 TextEncoder（RN 老引擎上不保证有）。 */
+    function utf8Encode(text) {
+        const out = [];
+        for (let i = 0; i < text.length; i += 1) {
+            let code = text.charCodeAt(i);
+            if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
+                const next = text.charCodeAt(i + 1);
+                if (next >= 0xdc00 && next <= 0xdfff) {
+                    code = (code - 0xd800) * 0x400 + (next - 0xdc00) + 0x10000;
+                    i += 1;
+                }
+            }
+            if (code < 0x80)
+                out.push(code);
+            else if (code < 0x800)
+                out.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+            else if (code < 0x10000)
+                out.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+            else {
+                out.push(0xf0 | (code >> 18), 0x80 | ((code >> 12) & 0x3f), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+            }
+        }
+        return Uint8Array.from(out);
+    }
+    /** UTF-8 解码。 */
+    function utf8Decode(bytes) {
+        let out = '';
+        let i = 0;
+        while (i < bytes.length) {
+            const byte = bytes[i];
+            let code;
+            if (byte < 0x80) {
+                code = byte;
+                i += 1;
+            }
+            else if (byte < 0xe0) {
+                code = ((byte & 0x1f) << 6) | (bytes[i + 1] & 0x3f);
+                i += 2;
+            }
+            else if (byte < 0xf0) {
+                code = ((byte & 0x0f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f);
+                i += 3;
+            }
+            else {
+                code =
+                    ((byte & 0x07) << 18) |
+                        ((bytes[i + 1] & 0x3f) << 12) |
+                        ((bytes[i + 2] & 0x3f) << 6) |
+                        (bytes[i + 3] & 0x3f);
+                i += 4;
+            }
+            if (code > 0xffff) {
+                code -= 0x10000;
+                out += String.fromCharCode(0xd800 + (code >> 10), 0xdc00 + (code & 0x3ff));
+            }
+            else {
+                out += String.fromCharCode(code);
+            }
+        }
+        return out;
+    }
+
+  });
+
+  define("core/customFields", function (module, exports, require) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.customFieldDefinitionId = customFieldDefinitionId;
+    exports.typeWithFieldIdentities = typeWithFieldIdentities;
+    exports.customFieldsForRecord = customFieldsForRecord;
+    exports.ensureCustomFieldDefinitions = ensureCustomFieldDefinitions;
+    exports.renamePresetFields = renamePresetFields;
+    const models_1 = require("./models");
+    const uuid_1 = require("./uuid");
+    function customFieldDefinitionId(typeId, name) {
+        return (0, uuid_1.derivedUUID)(`livemark.custom-field:${typeId}:${name.trim()}`);
+    }
+    function typeWithFieldIdentities(type) {
+        return { ...type, entryDefinitionIds: type.entries.map((name, index) => { var _a, _b; return (_b = (0, uuid_1.normalizeUUID)((_a = type.entryDefinitionIds) === null || _a === void 0 ? void 0 : _a[index])) !== null && _b !== void 0 ? _b : customFieldDefinitionId(type.id, name); }) };
+    }
+    /** Legacy names are used once to establish an identity. Existing identities always win. */
+    function customFieldsForRecord(record, types, definitions = []) {
+        var _a;
+        const type = types ? (0, models_1.catalogResolve)(types, record) : undefined;
+        const owner = (_a = record.typeID) !== null && _a !== void 0 ? _a : (0, models_1.builtInTypeID)(record.kind);
+        const counts = new Map();
+        record.extraFields.forEach((field) => { var _a; return counts.set(field.key.trim(), ((_a = counts.get(field.key.trim())) !== null && _a !== void 0 ? _a : 0) + 1); });
+        const result = record.extraFields.filter((field) => field.key.trim()).map((field) => {
+            var _a, _b, _c, _d;
+            const index = (_a = type === null || type === void 0 ? void 0 : type.entries.indexOf(field.key.trim())) !== null && _a !== void 0 ? _a : -1;
+            const id = (_b = (0, uuid_1.normalizeUUID)(field.definitionId)) !== null && _b !== void 0 ? _b : (counts.get(field.key.trim()) > 1
+                ? (0, uuid_1.derivedUUID)(`livemark.custom-field-instance:${field.id}`)
+                : (_d = (index >= 0 ? (0, uuid_1.normalizeUUID)((_c = type === null || type === void 0 ? void 0 : type.entryDefinitionIds) === null || _c === void 0 ? void 0 : _c[index]) : undefined)) !== null && _d !== void 0 ? _d : customFieldDefinitionId(owner, field.key));
+            const definition = definitions.find((item) => item.id === id);
+            return { id, name: field.key.trim() || (definition === null || definition === void 0 ? void 0 : definition.name) || '', value: field.value,
+                isPrivate: field.isPrivate === true || (definition === null || definition === void 0 ? void 0 : definition.isPrivate) === true };
+        });
+        type === null || type === void 0 ? void 0 : type.entries.forEach((name, index) => {
+            var _a, _b, _c;
+            const id = (_b = (0, uuid_1.normalizeUUID)((_a = type.entryDefinitionIds) === null || _a === void 0 ? void 0 : _a[index])) !== null && _b !== void 0 ? _b : customFieldDefinitionId(type.id, name);
+            if (!result.some((field) => field.id === id || field.name === name)) {
+                const definition = definitions.find((item) => item.id === id);
+                result.push({ id, name: (_c = definition === null || definition === void 0 ? void 0 : definition.name) !== null && _c !== void 0 ? _c : name, value: '', isPrivate: (definition === null || definition === void 0 ? void 0 : definition.isPrivate) === true });
+            }
+        });
+        return result;
+    }
+    /** Additive identity backfill; never removes or changes record values. Called inside a save transaction. */
+    function ensureCustomFieldDefinitions(archive) {
+        var _a, _b, _c;
+        const types = (0, models_1.makeRecordTypeCatalog)(archive.recordTypes, archive.hiddenRecordTypes);
+        const definitions = new Map(((_a = archive.customFieldDefinitions) !== null && _a !== void 0 ? _a : []).map((item) => [item.id, { ...item }]));
+        const upsertType = (type) => {
+            const identified = typeWithFieldIdentities(type);
+            identified.entries.forEach((name, index) => {
+                const id = identified.entryDefinitionIds[index];
+                definitions.set(id, { ...definitions.get(id), id, ownerTypeId: type.id, name });
+            });
+            return identified;
+        };
+        // Built-in presets need no stored type; their deterministic identities are enough.
+        types.types.forEach(upsertType);
+        if (archive.recordTypes)
+            archive.recordTypes = archive.recordTypes.map(upsertType);
+        const bindRecord = (record) => {
+            const fields = customFieldsForRecord(record, types, [...definitions.values()]);
+            return { ...record, extraFields: record.extraFields.map((field) => {
+                    var _a, _b, _c;
+                    if (!field.key.trim())
+                        return field;
+                    const resolved = fields.shift();
+                    const previous = definitions.get(resolved.id);
+                    definitions.set(resolved.id, { id: resolved.id, ownerTypeId: (_b = (_a = previous === null || previous === void 0 ? void 0 : previous.ownerTypeId) !== null && _a !== void 0 ? _a : record.typeID) !== null && _b !== void 0 ? _b : (0, models_1.builtInTypeID)(record.kind),
+                        name: (_c = previous === null || previous === void 0 ? void 0 : previous.name) !== null && _c !== void 0 ? _c : field.key.trim(), ...((previous === null || previous === void 0 ? void 0 : previous.isPrivate) || field.isPrivate ? { isPrivate: true } : {}) });
+                    return { ...field, definitionId: resolved.id, ...(resolved.isPrivate ? { isPrivate: true } : {}) };
+                }) };
+        };
+        archive.records = archive.records.map(bindRecord);
+        archive.deletedRecords = (_b = archive.deletedRecords) === null || _b === void 0 ? void 0 : _b.map((item) => ({ ...item, record: bindRecord(item.record) }));
+        // A private instance discovered later must protect earlier instances in this same save.
+        const applyPrivacy = (record) => ({ ...record, extraFields: record.extraFields.map((field) => { var _a; return field.definitionId && ((_a = definitions.get(field.definitionId)) === null || _a === void 0 ? void 0 : _a.isPrivate) ? { ...field, isPrivate: true } : field; }) });
+        archive.records = archive.records.map(applyPrivacy);
+        archive.deletedRecords = (_c = archive.deletedRecords) === null || _c === void 0 ? void 0 : _c.map((item) => ({ ...item, record: applyPrivacy(item.record) }));
+        if (definitions.size)
+            archive.customFieldDefinitions = [...definitions.values()];
+    }
+    /** Rename only untouched preset labels, preserving per-record labels and every value. */
+    function renamePresetFields(archive, previous, next) {
+        var _a;
+        const before = typeWithFieldIdentities(previous);
+        const after = typeWithFieldIdentities(next);
+        const changes = new Map();
+        after.entries.forEach((name, index) => {
+            const id = after.entryDefinitionIds[index];
+            const oldIndex = before.entryDefinitionIds.indexOf(id);
+            if (oldIndex >= 0 && before.entries[oldIndex] !== name)
+                changes.set(id, { before: before.entries[oldIndex], after: name });
+        });
+        const rename = (record) => ({ ...record, extraFields: record.extraFields.map((field) => {
+                const change = field.definitionId ? changes.get(field.definitionId) : undefined;
+                return change && field.key === change.before ? { ...field, key: change.after } : field;
+            }) });
+        archive.records = archive.records.map(rename);
+        archive.deletedRecords = (_a = archive.deletedRecords) === null || _a === void 0 ? void 0 : _a.map((item) => ({ ...item, record: rename(item.record) }));
+    }
+
+  });
+
+  define("core/template/canvas", function (module, exports, require) {
+    "use strict";
+    var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+        if (k2 === undefined) k2 = k;
+        var desc = Object.getOwnPropertyDescriptor(m, k);
+        if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+          desc = { enumerable: true, get: function() { return m[k]; } };
+        }
+        Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+        if (k2 === undefined) k2 = k;
+        o[k2] = m[k];
+    }));
+    var __exportStar = (this && this.__exportStar) || function(m, exports) {
+        for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.canvasElements = canvasElements;
+    exports.ensureCanvas = ensureCanvas;
+    exports.elementFrame = elementFrame;
+    exports.expandSelectionIDs = expandSelectionIDs;
+    exports.canvasWorldFrame = canvasWorldFrame;
+    exports.moveElements = moveElements;
+    exports.resizeElement = resizeElement;
+    exports.rotateElements = rotateElements;
+    exports.selectionBounds = selectionBounds;
+    exports.alignElements = alignElements;
+    exports.distributeElements = distributeElements;
+    exports.groupElements = groupElements;
+    exports.ungroupElements = ungroupElements;
+    exports.validateCanvasRelations = validateCanvasRelations;
+    exports.setElementFollow = setElementFollow;
+    exports.setElementsRegion = setElementsRegion;
+    exports.deleteElements = deleteElements;
+    exports.duplicateElements = duplicateElements;
+    exports.createContentRegion = createContentRegion;
+    exports.resizeElements = resizeElements;
+    exports.rotateSelection = rotateSelection;
+    /** Pure document commands shared by touch and desktop editors. Coordinates are 360pt canvas units. */
+    const model_1 = require("./model");
+    const grid_1 = require("./grid");
+    __exportStar(require("./grid"), exports);
+    function canvasElements(template) {
+        return template.root.children;
+    }
+    function ensureCanvas(template) {
+        if (template.root.layout === 'canvas')
+            return template;
+        // v2 documents are deliberately not migrated. Keep identity/name, start a clean canvas.
+        const fresh = (0, model_1.defaultTemplate)();
+        return { ...fresh, id: template.id, name: template.name, canvas: template.canvas };
+    }
+    function elementFrame(node) {
+        var _a;
+        return (_a = node.frame) !== null && _a !== void 0 ? _a : { x: 0, y: 0, width: typeof node.width === 'number' ? node.width : 160,
+            height: typeof node.height === 'number' ? node.height : node.kind === 'image' ? 160 : 40 };
+    }
+    function edit(template, fn) {
+        return { ...template, root: { ...template.root, layout: 'canvas', children: template.root.children.map(fn) } };
+    }
+    function expandSelectionIDs(template, ids) {
+        const wanted = new Set(ids);
+        const groups = new Set(canvasElements(template).filter(n => wanted.has(n.id) && n.groupId).map(n => n.groupId));
+        for (const node of canvasElements(template))
+            if (node.groupId && groups.has(node.groupId))
+                wanted.add(node.id);
+        return [...wanted];
+    }
+    function movableSelection(template, ids) {
+        const selected = new Set(expandSelectionIDs(template, ids));
+        return new Set(canvasElements(template).filter(n => selected.has(n.id) && !n.locked && !(n.regionId && selected.has(n.regionId))).map(n => n.id));
+    }
+    function regionAngle(template, node) {
+        var _a, _b;
+        return node.regionId ? (_b = (_a = canvasElements(template).find(n => n.id === node.regionId)) === null || _a === void 0 ? void 0 : _a.rotation) !== null && _b !== void 0 ? _b : 0 : 0;
+    }
+    function rotateDelta(x, y, degrees) {
+        const radians = degrees * Math.PI / 180;
+        return { x: x * Math.cos(radians) - y * Math.sin(radians), y: x * Math.sin(radians) + y * Math.cos(radians) };
+    }
+    /** Same unrotated rectangle about the transformed center used by scene.items. */
+    function canvasWorldFrame(template, node, layout) {
+        var _a, _b;
+        const frame = (_a = layout.byID[node.id]) === null || _a === void 0 ? void 0 : _a.frame;
+        const owner = node.regionId ? (_b = layout.byID[node.regionId]) === null || _b === void 0 ? void 0 : _b.frame : undefined;
+        if (!frame || !owner)
+            return frame;
+        const cx = owner.x + owner.width / 2, cy = owner.y + owner.height / 2;
+        const delta = rotateDelta(frame.x + frame.width / 2 - cx, frame.y + frame.height / 2 - cy, regionAngle(template, node));
+        return { ...frame, x: cx + delta.x - frame.width / 2, y: cy + delta.y - frame.height / 2 };
+    }
+    function frameFromWorld(template, node, frame, layout) {
+        var _a, _b;
+        const owner = node.regionId ? (_a = layout.byID[node.regionId]) === null || _a === void 0 ? void 0 : _a.frame : (_b = layout.byID[template.root.id]) === null || _b === void 0 ? void 0 : _b.frame;
+        if (!owner)
+            return frame;
+        const cx = owner.x + owner.width / 2, cy = owner.y + owner.height / 2;
+        const delta = rotateDelta(frame.x + frame.width / 2 - cx, frame.y + frame.height / 2 - cy, -regionAngle(template, node));
+        return { ...frame, x: cx + delta.x - frame.width / 2 - owner.x, y: cy + delta.y - frame.height / 2 - owner.y };
+    }
+    function moveElements(template, ids, dx, dy) {
+        if (!Number.isFinite(dx) || !Number.isFinite(dy))
+            return template;
+        const selected = movableSelection(template, ids);
+        return edit(template, node => {
+            if (!selected.has(node.id))
+                return node;
+            const frame = elementFrame(node);
+            const local = rotateDelta(dx, dy, -regionAngle(template, node));
+            // A follower whose target also moves must not receive the vertical delta twice.
+            const targetMoves = node.follow && selected.has(node.follow.targetId);
+            return { ...node, frame: { ...frame, x: frame.x + local.x, y: node.follow ? frame.y : frame.y + local.y },
+                ...(node.follow ? { follow: { ...node.follow, gap: Math.max(0, node.follow.gap + (targetMoves ? 0 : local.y)) } } : {}) };
+        });
+    }
+    function resizeElement(template, id, next, options = {}) {
+        const node = canvasElements(template).find(n => n.id === id);
+        if (!node || node.locked)
+            return template;
+        const old = elementFrame(node);
+        const frame = { x: Number.isFinite(next.x) ? next.x : old.x, y: Number.isFinite(next.y) ? next.y : old.y,
+            width: Math.max(8, Number.isFinite(next.width) ? next.width : old.width),
+            height: Math.max(8, Number.isFinite(next.height) ? next.height : old.height) };
+        const sx = frame.width / Math.max(1, old.width);
+        const sy = node.kind === 'stack' && node.layout === 'grid' ? sx : frame.height / Math.max(1, old.height);
+        return edit(template, item => {
+            var _a;
+            if (item.id === id)
+                return { ...item, frame,
+                    ...(item.kind === 'stack' && item.layout === 'grid' && item.grid ? { grid: { ...item.grid,
+                            columnGap: item.grid.columnGap * sx, rowGap: item.grid.rowGap * sy,
+                            rowHeights: (_a = item.grid.rowHeights) === null || _a === void 0 ? void 0 : _a.map(height => height == null ? null : height * sy) } } : {}),
+                    ...(item.kind === 'text' && options.scaleText ? { fontSize: Math.max(6, Math.min(120, item.fontSize * sx)) } : {}) };
+            if (item.regionId !== id || options.scaleChildren === false)
+                return item;
+            const f = elementFrame(item);
+            return { ...item, frame: { x: f.x * sx, y: f.y * sy, width: f.width * sx, height: f.height * sy },
+                ...(item.follow ? { follow: { ...item.follow, gap: item.follow.gap * sy } } : {}),
+                ...(item.kind === 'text' && options.scaleText ? { fontSize: Math.max(6, Math.min(120, item.fontSize * sx)) } : {}) };
+        });
+    }
+    function rotateElements(template, ids, degrees) {
+        const selected = movableSelection(template, ids);
+        return edit(template, n => selected.has(n.id) ? { ...n, rotation: ((degrees + 180) % 360 + 360) % 360 - 180 } : n);
+    }
+    function selectionBounds(template, ids, layout) {
+        const selected = movableSelection(template, ids);
+        const frames = canvasElements(template).filter(n => selected.has(n.id)).map(n => canvasWorldFrame(template, n, layout)).filter((f) => !!f);
+        if (!frames.length)
+            return null;
+        const x = Math.min(...frames.map(f => f.x));
+        const y = Math.min(...frames.map(f => f.y));
+        return { x, y, width: Math.max(...frames.map(f => f.x + f.width)) - x, height: Math.max(...frames.map(f => f.y + f.height)) - y };
+    }
+    function alignElements(template, ids, mode, layout) {
+        const selected = movableSelection(template, ids);
+        const bounds = selectionBounds(template, [...selected], layout);
+        if (!bounds)
+            return template;
+        const target = selected.size === 1 ? { x: 0, y: 0, width: model_1.CANVAS_WIDTH, height: layout.height } : bounds;
+        return edit(template, node => {
+            const world = canvasWorldFrame(template, node, layout);
+            if (!selected.has(node.id) || !world)
+                return node;
+            let dx = 0;
+            let dy = 0;
+            if (mode === 'left')
+                dx = target.x - world.x;
+            if (mode === 'center')
+                dx = target.x + (target.width - world.width) / 2 - world.x;
+            if (mode === 'right')
+                dx = target.x + target.width - world.width - world.x;
+            if (mode === 'top')
+                dy = target.y - world.y;
+            if (mode === 'middle')
+                dy = target.y + (target.height - world.height) / 2 - world.y;
+            if (mode === 'bottom')
+                dy = target.y + target.height - world.height - world.y;
+            // Alignment is an explicit fixed-position command; preserve actual position when detaching.
+            return { ...node, follow: undefined, frame: frameFromWorld(template, node, { ...world, x: world.x + dx, y: world.y + dy }, layout) };
+        });
+    }
+    function distributeElements(template, ids, axis, layout) {
+        const selected = movableSelection(template, ids);
+        const entries = canvasElements(template).filter(n => selected.has(n.id) && layout.byID[n.id]).map(n => ({ node: n, frame: canvasWorldFrame(template, n, layout) }));
+        if (entries.length < 3)
+            return template;
+        const horizontal = axis === 'horizontal';
+        entries.sort((a, b) => horizontal ? a.frame.x - b.frame.x : a.frame.y - b.frame.y);
+        const first = entries[0].frame;
+        const last = entries[entries.length - 1].frame;
+        const length = entries.reduce((sum, e) => sum + (horizontal ? e.frame.width : e.frame.height), 0);
+        const gap = ((horizontal ? last.x + last.width - first.x : last.y + last.height - first.y) - length) / (entries.length - 1);
+        const positions = new Map();
+        let cursor = horizontal ? first.x : first.y;
+        for (const e of entries) {
+            positions.set(e.node.id, cursor);
+            cursor += (horizontal ? e.frame.width : e.frame.height) + gap;
+        }
+        return edit(template, node => {
+            const position = positions.get(node.id);
+            if (position === undefined)
+                return node;
+            const world = canvasWorldFrame(template, node, layout);
+            return { ...node, follow: undefined, frame: frameFromWorld(template, node, { ...world,
+                    x: horizontal ? position : world.x, y: horizontal ? world.y : position }, layout) };
+        });
+    }
+    function groupElements(template, ids, env) {
+        const wanted = movableSelection(template, ids);
+        const nodes = canvasElements(template).filter(n => wanted.has(n.id));
+        if (nodes.length < 2 || new Set(nodes.map(n => { var _a; return (_a = n.regionId) !== null && _a !== void 0 ? _a : ''; })).size > 1)
+            return template;
+        const groupId = (0, model_1.resolveEnvironment)(env).newID();
+        return edit(template, n => wanted.has(n.id) ? { ...n, groupId } : n);
+    }
+    function ungroupElements(template, ids) {
+        const wanted = new Set(expandSelectionIDs(template, ids));
+        return edit(template, n => wanted.has(n.id) ? { ...n, groupId: undefined } : n);
+    }
+    /** Invalid relationships are rejected at import and never committed by editing commands. */
+    function validateCanvasRelations(template) {
+        var _a, _b;
+        if (template.root.layout !== 'canvas')
+            return [];
+        const nodes = canvasElements(template);
+        const byID = new Map(nodes.map(n => [n.id, n]));
+        const errors = [];
+        for (const n of nodes) {
+            if (n.kind === 'stack' && (!['region', 'grid'].includes((_a = n.layout) !== null && _a !== void 0 ? _a : '') || n.children.length || n.regionId))
+                errors.push(`invalid region:${n.id}`);
+            if (n.kind === 'stack' && n.layout === 'grid')
+                errors.push(...(0, grid_1.validateGrid)(template, n));
+            if (n.regionId) {
+                const owner = byID.get(n.regionId);
+                if (!owner || owner.kind !== 'stack' || !['region', 'grid'].includes((_b = owner.layout) !== null && _b !== void 0 ? _b : ''))
+                    errors.push(`missing region:${n.id}`);
+            }
+            if (n.cell && (!n.regionId || !(0, grid_1.gridLayer)(template, n.regionId)))
+                errors.push(`orphan cell:${n.id}`);
+            if (n.follow) {
+                const target = byID.get(n.follow.targetId);
+                if (!target || target.id === n.id || target.regionId !== n.regionId || target.decoration)
+                    errors.push(`invalid follow:${n.id}`);
+            }
+        }
+        const done = new Set();
+        const visiting = new Set();
+        const visit = (id) => {
+            var _a, _b;
+            if (visiting.has(id)) {
+                errors.push(`follow cycle:${id}`);
+                return;
+            }
+            if (done.has(id))
+                return;
+            visiting.add(id);
+            const target = (_b = (_a = byID.get(id)) === null || _a === void 0 ? void 0 : _a.follow) === null || _b === void 0 ? void 0 : _b.targetId;
+            if (target && byID.has(target))
+                visit(target);
+            visiting.delete(id);
+            done.add(id);
+        };
+        nodes.forEach(n => visit(n.id));
+        return errors;
+    }
+    function setElementFollow(template, id, targetId, gap = 12, layout) {
+        var _a, _b, _c;
+        const node = canvasElements(template).find(n => n.id === id);
+        if (!node || node.locked)
+            return template;
+        const world = (_a = layout === null || layout === void 0 ? void 0 : layout.byID[id]) === null || _a === void 0 ? void 0 : _a.frame;
+        const owner = node.regionId ? (_b = layout === null || layout === void 0 ? void 0 : layout.byID[node.regionId]) === null || _b === void 0 ? void 0 : _b.frame : (_c = layout === null || layout === void 0 ? void 0 : layout.byID[template.root.id]) === null || _c === void 0 ? void 0 : _c.frame;
+        const next = edit(template, n => {
+            var _a, _b;
+            return n.id === id ? { ...n, follow: targetId ? { targetId, gap: Math.max(0, gap) } : undefined,
+                ...(!targetId && world ? { frame: { ...elementFrame(n), x: world.x - ((_a = owner === null || owner === void 0 ? void 0 : owner.x) !== null && _a !== void 0 ? _a : 0), y: world.y - ((_b = owner === null || owner === void 0 ? void 0 : owner.y) !== null && _b !== void 0 ? _b : 0) } } : {}) } : n;
+        });
+        return validateCanvasRelations(next).length ? template : next;
+    }
+    function setElementsRegion(template, ids, regionId, layout) {
+        const selected = movableSelection(template, ids);
+        const grid = regionId ? (0, grid_1.gridLayer)(template, regionId) : undefined;
+        if (grid === null || grid === void 0 ? void 0 : grid.grid) {
+            let result = template;
+            for (const id of selected) {
+                let placed = false;
+                for (let row = 0; row < grid.grid.rows && !placed; row++)
+                    for (let column = 0; column < grid.grid.columns; column++) {
+                        const cell = (0, grid_1.gridCellAt)(grid.grid, row, column);
+                        if (cell.row !== row || cell.column !== column)
+                            continue;
+                        if (result.root.children.some(n => { var _a; return n.regionId === regionId && ((_a = n.cell) === null || _a === void 0 ? void 0 : _a.row) === row && n.cell.column === column; }))
+                            continue;
+                        const next = (0, grid_1.setGridCell)(result, id, regionId, { row, column });
+                        if (next !== result) {
+                            result = next;
+                            placed = true;
+                            break;
+                        }
+                    }
+                if (!placed)
+                    return template;
+            }
+            return result;
+        }
+        const region = regionId ? canvasElements(template).find(n => n.id === regionId && n.kind === 'stack' && n.layout === 'region') : null;
+        if (regionId && !region)
+            return template;
+        const next = edit(template, n => {
+            var _a;
+            if (!selected.has(n.id) || n.kind === 'stack')
+                return n;
+            const world = canvasWorldFrame(template, n, layout);
+            if (!world)
+                return n;
+            const moved = { ...n, regionId: regionId !== null && regionId !== void 0 ? regionId : undefined, cell: undefined };
+            return { ...moved, follow: undefined,
+                rotation: ((_a = n.rotation) !== null && _a !== void 0 ? _a : 0) + regionAngle(template, n) - regionAngle(template, moved),
+                frame: frameFromWorld(template, moved, world, layout) };
+        });
+        // Followers left outside the moved region detach instead of becoming dangling constraints.
+        return edit(next, n => { var _a; return n.follow && ((_a = next.root.children.find(t => t.id === n.follow.targetId)) === null || _a === void 0 ? void 0 : _a.regionId) !== n.regionId ? { ...n, follow: undefined } : n; });
+    }
+    function deleteElements(template, ids) {
+        const remove = movableSelection(template, ids);
+        for (const n of canvasElements(template))
+            if (n.regionId && remove.has(n.regionId))
+                remove.add(n.id);
+        const byID = new Map(canvasElements(template).map(n => [n.id, n]));
+        const children = canvasElements(template).filter(n => !remove.has(n.id)).map(n => {
+            if (!n.follow || !remove.has(n.follow.targetId))
+                return n;
+            let previous = byID.get(n.follow.targetId);
+            const seen = new Set();
+            while (previous && remove.has(previous.id) && previous.follow && !seen.has(previous.id)) {
+                seen.add(previous.id);
+                previous = byID.get(previous.follow.targetId);
+            }
+            if (previous && !remove.has(previous.id))
+                return { ...n, follow: { ...n.follow, targetId: previous.id } };
+            return { ...n, follow: undefined, frame: { ...elementFrame(n), y: previous ? elementFrame(previous).y : elementFrame(n).y } };
+        });
+        return { ...template, root: { ...template.root, children } };
+    }
+    function duplicateElements(template, ids, env) {
+        const selected = new Set(expandSelectionIDs(template, ids));
+        for (const n of canvasElements(template))
+            if (n.regionId && selected.has(n.regionId))
+                selected.add(n.id);
+        const e = (0, model_1.resolveEnvironment)(env);
+        const remap = new Map();
+        const groups = new Map();
+        for (const id of selected)
+            remap.set(id, e.newID());
+        let copies = canvasElements(template).filter(n => selected.has(n.id)).map(n => {
+            var _a;
+            if (n.groupId && !groups.has(n.groupId))
+                groups.set(n.groupId, e.newID());
+            const frame = elementFrame(n);
+            const copiedOwner = n.regionId && remap.has(n.regionId);
+            return { ...n, id: remap.get(n.id), groupId: n.groupId ? groups.get(n.groupId) : undefined,
+                regionId: copiedOwner ? remap.get(n.regionId) : n.regionId,
+                follow: n.follow ? { ...n.follow, targetId: (_a = remap.get(n.follow.targetId)) !== null && _a !== void 0 ? _a : n.follow.targetId } : undefined,
+                frame: { ...frame, x: frame.x + (copiedOwner ? 0 : 12), y: frame.y + (copiedOwner ? 0 : 12) } };
+        });
+        const taken = new Set(canvasElements(template).filter(n => n.cell).map(n => `${n.regionId}:${n.cell.row}:${n.cell.column}`));
+        const placed = [];
+        for (const copy of copies) {
+            const owner = copy.regionId ? (0, grid_1.gridLayer)(template, copy.regionId) : undefined;
+            if (!(owner === null || owner === void 0 ? void 0 : owner.grid) || !copy.cell) {
+                placed.push(copy);
+                continue;
+            }
+            let cell;
+            for (let row = 0; row < owner.grid.rows && !cell; row++)
+                for (let column = 0; column < owner.grid.columns; column++) {
+                    const at = (0, grid_1.gridCellAt)(owner.grid, row, column), key = `${owner.id}:${row}:${column}`;
+                    if (at.row === row && at.column === column && !taken.has(key)) {
+                        cell = { row, column };
+                        taken.add(key);
+                        break;
+                    }
+                }
+            if (!cell)
+                return template;
+            placed.push({ ...copy, cell });
+        }
+        copies = placed;
+        return { ...template, root: { ...template.root, children: [...template.root.children, ...copies] } };
+    }
+    function createContentRegion(frame, env) {
+        return (0, model_1.makeStackNode)('column', { layout: 'region', frame, padding: { top: 12, right: 12, bottom: 12, left: 12 }, children: [] }, env);
+    }
+    /** Scale a selection about a supplied world-space bounding box, including its text if requested. */
+    function resizeElements(template, ids, target, layout, options = {}) {
+        const selected = movableSelection(template, ids);
+        const bounds = selectionBounds(template, [...selected], layout);
+        if (!bounds)
+            return template;
+        const sx = Math.max(1, target.width) / Math.max(1, bounds.width);
+        const sy = Math.max(1, target.height) / Math.max(1, bounds.height);
+        let result = template;
+        for (const id of selected) {
+            const node = canvasElements(result).find(n => n.id === id);
+            const world = canvasWorldFrame(template, node, layout);
+            if (!world)
+                continue;
+            result = setElementFollow(result, id, null, 0, layout);
+            result = resizeElement(result, id, frameFromWorld(template, node, {
+                x: target.x + (world.x - bounds.x) * sx,
+                y: target.y + (world.y - bounds.y) * sy,
+                width: world.width * sx, height: world.height * sy,
+            }, layout), options);
+        }
+        return result;
+    }
+    /** Rotate every selected object's center about the selection center. Delta is in degrees. */
+    function rotateSelection(template, ids, deltaDegrees, layout) {
+        if (!Number.isFinite(deltaDegrees))
+            return template;
+        const selected = movableSelection(template, ids);
+        const bounds = selectionBounds(template, [...selected], layout);
+        if (!bounds)
+            return template;
+        const cx = bounds.x + bounds.width / 2;
+        const cy = bounds.y + bounds.height / 2;
+        const radians = deltaDegrees * Math.PI / 180;
+        const c = Math.cos(radians);
+        const s = Math.sin(radians);
+        return edit(template, node => {
+            var _a;
+            const world = canvasWorldFrame(template, node, layout);
+            if (!selected.has(node.id) || !world)
+                return node;
+            const dx = world.x + world.width / 2 - cx;
+            const dy = world.y + world.height / 2 - cy;
+            return { ...node, follow: undefined,
+                rotation: (((((_a = node.rotation) !== null && _a !== void 0 ? _a : 0) + deltaDegrees + 180) % 360) + 360) % 360 - 180,
+                frame: frameFromWorld(template, node, { ...world, x: cx + dx * c - dy * s - world.width / 2,
+                    y: cy + dx * s + dy * c - world.height / 2 }, layout) };
+        });
+    }
+
+  });
+
+  define("core/template/grid", function (module, exports, require) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.gridLayer = void 0;
+    exports.createGridLayer = createGridLayer;
+    exports.gridCellAt = gridCellAt;
+    exports.gridCellForNode = gridCellForNode;
+    exports.gridCellFrames = gridCellFrames;
+    exports.validateGrid = validateGrid;
+    exports.setGridCell = setGridCell;
+    exports.mergeGridCells = mergeGridCells;
+    exports.splitGridCell = splitGridCell;
+    exports.resizeGrid = resizeGrid;
+    exports.insertGridTrack = insertGridTrack;
+    exports.deleteGridTrack = deleteGridTrack;
+    const model_1 = require("./model");
+    const span = (cell) => { var _a, _b; return ({ row: cell.row, column: cell.column, rowSpan: (_a = cell.rowSpan) !== null && _a !== void 0 ? _a : 1, colSpan: (_b = cell.colSpan) !== null && _b !== void 0 ? _b : 1 }); };
+    const inside = (cell, row, column) => { var _a, _b; return row >= cell.row && column >= cell.column && row < cell.row + ((_a = cell.rowSpan) !== null && _a !== void 0 ? _a : 1) && column < cell.column + ((_b = cell.colSpan) !== null && _b !== void 0 ? _b : 1); };
+    const intersects = (a, b) => { var _a, _b, _c, _d; return a.row < b.row + ((_a = b.rowSpan) !== null && _a !== void 0 ? _a : 1) && b.row < a.row + ((_b = a.rowSpan) !== null && _b !== void 0 ? _b : 1) && a.column < b.column + ((_c = b.colSpan) !== null && _c !== void 0 ? _c : 1) && b.column < a.column + ((_d = a.colSpan) !== null && _d !== void 0 ? _d : 1); };
+    const contains = (a, b) => { var _a, _b; return inside(a, b.row, b.column) && inside(a, b.row + ((_a = b.rowSpan) !== null && _a !== void 0 ? _a : 1) - 1, b.column + ((_b = b.colSpan) !== null && _b !== void 0 ? _b : 1) - 1); };
+    const gridLayer = (template, id) => template.root.children.find((n) => n.id === id && n.kind === 'stack' && n.layout === 'grid');
+    exports.gridLayer = gridLayer;
+    const replace = (template, change) => ({ ...template, root: { ...template.root, children: template.root.children.map(change) } });
+    function createGridLayer(frame, columns = 2, rows = 2, env) {
+        return (0, model_1.makeStackNode)('column', { name: '网格图层', layout: 'grid', frame: { ...frame, height: 0 }, padding: model_1.ZERO_PADDING,
+            grid: (0, model_1.sanitizeGrid)({ rows, columns, rowGap: 12, columnGap: 12 }), children: [] }, env);
+    }
+    function gridCellAt(grid, row, column) {
+        var _a, _b;
+        return span((_b = (_a = grid.merges) === null || _a === void 0 ? void 0 : _a.find(cell => inside(cell, row, column))) !== null && _b !== void 0 ? _b : { row, column });
+    }
+    function gridCellForNode(template, node) {
+        const layer = node.regionId ? (0, exports.gridLayer)(template, node.regionId) : undefined;
+        return (layer === null || layer === void 0 ? void 0 : layer.grid) && node.cell ? gridCellAt(layer.grid, node.cell.row, node.cell.column) : undefined;
+    }
+    function gridCellFrames(template, layerId, layout) {
+        var _a, _b, _c, _d;
+        const layer = (0, exports.gridLayer)(template, layerId), tracks = (_a = layout.grids) === null || _a === void 0 ? void 0 : _a[layerId], owner = (_b = layout.byID[layerId]) === null || _b === void 0 ? void 0 : _b.frame;
+        if (!(layer === null || layer === void 0 ? void 0 : layer.grid) || !tracks || !owner)
+            return [];
+        const result = [], angle = ((_c = layer.rotation) !== null && _c !== void 0 ? _c : 0) * Math.PI / 180;
+        for (let row = 0; row < layer.grid.rows; row++)
+            for (let column = 0; column < layer.grid.columns; column++) {
+                const cell = gridCellAt(layer.grid, row, column);
+                if (cell.row !== row || cell.column !== column)
+                    continue;
+                const x = tracks.columnOffsets[column], y = tracks.rowOffsets[row];
+                const lastColumn = column + cell.colSpan - 1, lastRow = row + cell.rowSpan - 1;
+                const width = tracks.columnOffsets[lastColumn] + tracks.columnWidths[lastColumn] - x;
+                const height = tracks.rowOffsets[lastRow] + tracks.rowHeights[lastRow] - y;
+                const dx = x + width / 2 - owner.width / 2, dy = y + height / 2 - owner.height / 2;
+                result.push({ ...cell, localFrame: { x, y, width, height },
+                    frame: { x: owner.x + owner.width / 2 + dx * Math.cos(angle) - dy * Math.sin(angle) - width / 2,
+                        y: owner.y + owner.height / 2 + dx * Math.sin(angle) + dy * Math.cos(angle) - height / 2, width, height },
+                    rotation: (_d = layer.rotation) !== null && _d !== void 0 ? _d : 0, collapsed: height <= .01 });
+            }
+        return result;
+    }
+    function validateGrid(template, layer) {
+        var _a;
+        const grid = layer.grid, errors = [];
+        if (!grid || !Number.isInteger(grid.rows) || !Number.isInteger(grid.columns) || grid.rows < 1 || grid.rows > 64 || grid.columns < 1 || grid.columns > 12)
+            return [`invalid grid:${layer.id}`];
+        const valid = (cell) => { var _a, _b, _c, _d, _e, _f; return [cell.row, cell.column, (_a = cell.rowSpan) !== null && _a !== void 0 ? _a : 1, (_b = cell.colSpan) !== null && _b !== void 0 ? _b : 1].every(Number.isInteger) && cell.row >= 0 && cell.column >= 0 && ((_c = cell.rowSpan) !== null && _c !== void 0 ? _c : 1) > 0 && ((_d = cell.colSpan) !== null && _d !== void 0 ? _d : 1) > 0 && cell.row + ((_e = cell.rowSpan) !== null && _e !== void 0 ? _e : 1) <= grid.rows && cell.column + ((_f = cell.colSpan) !== null && _f !== void 0 ? _f : 1) <= grid.columns; };
+        const merges = (_a = grid.merges) !== null && _a !== void 0 ? _a : [];
+        merges.forEach((cell, i) => { if (!valid(cell))
+            errors.push(`grid bounds:${layer.id}`); if (merges.slice(i + 1).some(next => intersects(cell, next)))
+            errors.push(`grid overlap:${layer.id}`); });
+        const occupied = new Set();
+        for (const node of template.root.children.filter(n => n.regionId === layer.id)) {
+            if (node.decoration && !node.cell)
+                continue;
+            if (!node.cell || !valid(node.cell)) {
+                errors.push(`grid cell:${node.id}`);
+                continue;
+            }
+            const cell = gridCellAt(grid, node.cell.row, node.cell.column), key = `${cell.row}:${cell.column}`;
+            if (cell.row !== node.cell.row || cell.column !== node.cell.column || occupied.has(key) || node.follow)
+                errors.push(`grid content:${node.id}`);
+            occupied.add(key);
+        }
+        return errors;
+    }
+    /** Existing content in the same layer swaps cells. Cross-layer conflicts are left unchanged. */
+    function setGridCell(template, nodeId, layerId, requested) {
+        const layer = (0, exports.gridLayer)(template, layerId), node = template.root.children.find(n => n.id === nodeId);
+        if (!(layer === null || layer === void 0 ? void 0 : layer.grid) || layer.locked || !node || node.locked || node.kind === 'stack' || requested.row < 0 || requested.column < 0 || requested.row >= layer.grid.rows || requested.column >= layer.grid.columns)
+            return template;
+        const cell = gridCellAt(layer.grid, Math.floor(requested.row), Math.floor(requested.column));
+        const occupied = template.root.children.find(n => { var _a; return n.id !== nodeId && n.regionId === layerId && ((_a = n.cell) === null || _a === void 0 ? void 0 : _a.row) === cell.row && n.cell.column === cell.column; });
+        if (occupied && (occupied.locked || node.regionId !== layerId || !node.cell))
+            return template;
+        return replace(template, n => n.id === nodeId ? { ...n, regionId: layerId, cell: { row: cell.row, column: cell.column }, follow: undefined, groupId: undefined } : n.id === (occupied === null || occupied === void 0 ? void 0 : occupied.id) ? { ...n, cell: node.cell } : n);
+    }
+    function mergeGridCells(template, layerId, requested) {
+        var _a, _b;
+        const layer = (0, exports.gridLayer)(template, layerId), cell = span(requested);
+        if (!(layer === null || layer === void 0 ? void 0 : layer.grid) || layer.locked)
+            return { template, error: 'invalidGrid' };
+        if (![cell.row, cell.column, cell.rowSpan, cell.colSpan].every(Number.isInteger) || cell.row < 0 || cell.column < 0 || cell.rowSpan < 1 || cell.colSpan < 1 || cell.row + cell.rowSpan > layer.grid.rows || cell.column + cell.colSpan > layer.grid.columns)
+            return { template, error: 'outOfBounds' };
+        if ((_a = layer.grid.merges) === null || _a === void 0 ? void 0 : _a.some(old => intersects(old, cell) && !contains(cell, old)))
+            return { template, error: 'overlappingMerge' };
+        const content = template.root.children.filter(n => n.regionId === layerId && n.cell && inside(cell, n.cell.row, n.cell.column));
+        if (content.length > 1)
+            return { template, error: 'multipleContent' };
+        const merges = [...((_b = layer.grid.merges) !== null && _b !== void 0 ? _b : []).filter(old => !intersects(old, cell)), ...(cell.rowSpan > 1 || cell.colSpan > 1 ? [cell] : [])];
+        return { template: replace(template, n => { var _a; return n.id === layerId ? { ...layer, grid: { ...layer.grid, merges: merges.length ? merges : undefined } } : n.id === ((_a = content[0]) === null || _a === void 0 ? void 0 : _a.id) ? { ...n, cell: { row: cell.row, column: cell.column } } : n; }) };
+    }
+    function splitGridCell(template, layerId, row, column) {
+        var _a;
+        const layer = (0, exports.gridLayer)(template, layerId);
+        if (!(layer === null || layer === void 0 ? void 0 : layer.grid) || layer.locked)
+            return template;
+        const merges = ((_a = layer.grid.merges) !== null && _a !== void 0 ? _a : []).filter(cell => !inside(cell, row, column));
+        return replace(template, n => n.id === layerId ? { ...layer, grid: { ...layer.grid, merges: merges.length ? merges : undefined } } : n);
+    }
+    /** Shrinking relocates displaced cells only when all content still fits. Otherwise it is a no-op. */
+    function resizeGrid(template, layerId, rows, columns) {
+        var _a;
+        const layer = (0, exports.gridLayer)(template, layerId);
+        if (!(layer === null || layer === void 0 ? void 0 : layer.grid) || layer.locked)
+            return template;
+        rows = Math.max(1, Math.min(64, Math.round(rows)));
+        columns = Math.max(1, Math.min(12, Math.round(columns)));
+        if (!Number.isFinite(rows) || !Number.isFinite(columns))
+            return template;
+        const grid = (0, model_1.sanitizeGrid)({ ...layer.grid, rows, columns, merges: (_a = layer.grid.merges) === null || _a === void 0 ? void 0 : _a.filter(cell => { var _a, _b; return cell.row + ((_a = cell.rowSpan) !== null && _a !== void 0 ? _a : 1) <= rows && cell.column + ((_b = cell.colSpan) !== null && _b !== void 0 ? _b : 1) <= columns; }) });
+        const positions = new Map(), taken = new Set();
+        const members = template.root.children.filter(n => n.regionId === layerId && n.cell);
+        const displaced = [];
+        for (const node of members) {
+            const cell = node.cell, key = `${cell.row}:${cell.column}`;
+            if (cell.row < rows && cell.column < columns && !taken.has(key)) {
+                positions.set(node.id, cell);
+                taken.add(key);
+            }
+            else
+                displaced.push(node);
+        }
+        for (const node of displaced) {
+            let available;
+            for (let row = 0; row < rows && !available; row++)
+                for (let column = 0; column < columns; column++) {
+                    const cell = gridCellAt(grid, row, column), key = `${row}:${column}`;
+                    if (cell.row === row && cell.column === column && !taken.has(key)) {
+                        available = { row, column };
+                        taken.add(key);
+                        break;
+                    }
+                }
+            if (!available)
+                return template;
+            positions.set(node.id, available);
+        }
+        return replace(template, n => n.id === layerId ? { ...layer, grid } : positions.has(n.id) ? { ...n, cell: positions.get(n.id) } : n);
+    }
+    function insertGridTrack(template, layerId, axis, at) {
+        var _a;
+        const layer = (0, exports.gridLayer)(template, layerId);
+        if (!(layer === null || layer === void 0 ? void 0 : layer.grid) || layer.locked)
+            return template;
+        const grid = layer.grid, count = axis === 'row' ? grid.rows : grid.columns;
+        if (count >= (axis === 'row' ? 64 : 12))
+            return template;
+        const index = Math.max(0, Math.min(count, Math.floor(at))), spanKey = axis === 'row' ? 'rowSpan' : 'colSpan';
+        const merges = (_a = grid.merges) === null || _a === void 0 ? void 0 : _a.map(raw => { const cell = span(raw); return cell[axis] >= index ? { ...cell, [axis]: cell[axis] + 1 } : cell[axis] + cell[spanKey] > index ? { ...cell, [spanKey]: cell[spanKey] + 1 } : cell; });
+        const tracks = axis === 'row' ? Array.from({ length: count }, (_, i) => { var _a, _b; return (_b = (_a = grid.rowHeights) === null || _a === void 0 ? void 0 : _a[i]) !== null && _b !== void 0 ? _b : null; }) : Array.from({ length: count }, (_, i) => { var _a, _b; return (_b = (_a = grid.columnWeights) === null || _a === void 0 ? void 0 : _a[i]) !== null && _b !== void 0 ? _b : 1; });
+        tracks.splice(index, 0, axis === 'row' ? null : 1);
+        const next = { ...grid, [axis === 'row' ? 'rows' : 'columns']: count + 1, [axis === 'row' ? 'rowHeights' : 'columnWeights']: tracks, merges };
+        return replace(template, n => n.id === layerId ? { ...layer, grid: next } : n.regionId === layerId && n.cell && n.cell[axis] >= index ? { ...n, cell: { ...n.cell, [axis]: n.cell[axis] + 1 } } : n);
+    }
+    function deleteGridTrack(template, layerId, axis, at) {
+        var _a;
+        const layer = (0, exports.gridLayer)(template, layerId);
+        if (!(layer === null || layer === void 0 ? void 0 : layer.grid) || layer.locked)
+            return { template, error: 'invalidGrid' };
+        const grid = layer.grid, count = axis === 'row' ? grid.rows : grid.columns, index = Math.floor(at);
+        if (count <= 1 || index < 0 || index >= count)
+            return { template, error: 'outOfBounds' };
+        if (template.root.children.some(n => { var _a; return n.regionId === layerId && ((_a = n.cell) === null || _a === void 0 ? void 0 : _a[axis]) === index; }))
+            return { template, error: 'occupied' };
+        const spanKey = axis === 'row' ? 'rowSpan' : 'colSpan';
+        const merges = (_a = grid.merges) === null || _a === void 0 ? void 0 : _a.map(raw => { const cell = span(raw); return cell[axis] > index ? { ...cell, [axis]: cell[axis] - 1 } : cell[axis] <= index && cell[axis] + cell[spanKey] > index ? { ...cell, [spanKey]: cell[spanKey] - 1 } : cell; }).filter(cell => cell.rowSpan > 0 && cell.colSpan > 0 && (cell.rowSpan > 1 || cell.colSpan > 1));
+        const tracks = axis === 'row' ? Array.from({ length: count }, (_, i) => { var _a, _b; return (_b = (_a = grid.rowHeights) === null || _a === void 0 ? void 0 : _a[i]) !== null && _b !== void 0 ? _b : null; }) : Array.from({ length: count }, (_, i) => { var _a, _b; return (_b = (_a = grid.columnWeights) === null || _a === void 0 ? void 0 : _a[i]) !== null && _b !== void 0 ? _b : 1; });
+        tracks.splice(index, 1);
+        const next = { ...grid, [axis === 'row' ? 'rows' : 'columns']: count - 1, [axis === 'row' ? 'rowHeights' : 'columnWeights']: tracks, merges };
+        return { template: replace(template, n => n.id === layerId ? { ...layer, grid: next } : n.regionId === layerId && n.cell && n.cell[axis] > index ? { ...n, cell: { ...n.cell, [axis]: n.cell[axis] - 1 } } : n) };
+    }
+
+  });
+
+  define("core/template/canvasLayout", function (module, exports, require) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.layoutCanvas = layoutCanvas;
+    /** Deterministic v3 geometry: flat free objects, one-level regions and vertical follow links. */
+    const model_1 = require("./model");
+    const canvas_1 = require("./canvas");
+    const grid_1 = require("./grid");
+    const MAX_CONTENT_HEIGHT = 20000;
+    function layoutCanvas(template, values, measure, options = {}) {
+        var _a, _b, _c, _d, _e, _f;
+        const source = template.root.children;
+        const grids = {};
+        const scopes = new Map();
+        for (const node of source) {
+            const key = (_a = node.regionId) !== null && _a !== void 0 ? _a : '';
+            scopes.set(key, [...((_b = scopes.get(key)) !== null && _b !== void 0 ? _b : []), node]);
+        }
+        const measureNode = (node, width) => {
+            var _a;
+            if (node.kind !== 'text')
+                return { width, height: (0, canvas_1.elementFrame)(node).height };
+            return measure({ text: (_a = values[node.id]) !== null && _a !== void 0 ? _a : '', label: node.label, inlineLabel: !!node.inlineLabel,
+                fontSize: node.fontSize, fontId: node.fontId, weight: node.weight, design: node.design,
+                alignment: node.alignment, tracking: node.tracking, lineLimit: 10000,
+                chip: !!node.chip || !!node.chipAccent, barcode: node.field === '条码', maxWidth: width });
+        };
+        const solveGrid = (owner) => {
+            var _a, _b, _c;
+            const grid = owner.grid, members = (_a = scopes.get(owner.id)) !== null && _a !== void 0 ? _a : [], pad = (_b = owner.padding) !== null && _b !== void 0 ? _b : model_1.ZERO_PADDING;
+            const initial = (0, canvas_1.elementFrame)(owner), editing = options.editingGridId === owner.id;
+            const available = Math.max(1, initial.width - pad.left - pad.right - (grid.columns - 1) * grid.columnGap);
+            const weights = Array.from({ length: grid.columns }, (_, i) => { var _a, _b; return Math.max(.05, (_b = (_a = grid.columnWeights) === null || _a === void 0 ? void 0 : _a[i]) !== null && _b !== void 0 ? _b : 1); });
+            const sum = weights.reduce((a, b) => a + b, 0), columnWidths = weights.map(weight => available * weight / sum);
+            const columnOffsets = [];
+            let x = pad.left;
+            columnWidths.forEach(width => { columnOffsets.push(x); x += width + grid.columnGap; });
+            const rowHeights = Array.from({ length: grid.rows }, (_, i) => { var _a, _b; return (_b = (_a = grid.rowHeights) === null || _a === void 0 ? void 0 : _a[i]) !== null && _b !== void 0 ? _b : 0; });
+            const active = Array.from({ length: grid.rows }, () => editing || grid.collapseEmptyRows === false);
+            const entries = members.map(node => {
+                var _a, _b, _c;
+                const frame = (0, canvas_1.elementFrame)(node), cell = node.cell ? (0, grid_1.gridCellAt)(grid, node.cell.row, node.cell.column) : undefined;
+                const collapsed = node.visible === false || (node.kind === 'text' && ((_a = values[node.id]) !== null && _a !== void 0 ? _a : null) === null && node.hideWhenEmpty !== false);
+                if (!cell || cell.row < 0 || cell.column < 0 || cell.row + cell.rowSpan > grid.rows || cell.column + cell.colSpan > grid.columns)
+                    return { node, frame, collapsed, overflow: false, cell: undefined, natural: frame.height };
+                const last = cell.column + cell.colSpan - 1;
+                const width = columnOffsets[last] + columnWidths[last] - columnOffsets[cell.column];
+                const natural = node.kind === 'text' ? measureNode(node, width).height : node.kind === 'image' ? width * ((_b = node.imageAspect) !== null && _b !== void 0 ? _b : frame.height / Math.max(1, frame.width)) : frame.height;
+                if (!collapsed && !node.decoration) {
+                    for (let row = cell.row; row < cell.row + cell.rowSpan; row++)
+                        active[row] = true;
+                    if (cell.rowSpan === 1 && ((_c = grid.rowHeights) === null || _c === void 0 ? void 0 : _c[cell.row]) == null)
+                        rowHeights[cell.row] = Math.max(rowHeights[cell.row], natural);
+                }
+                return { node, frame: { x: columnOffsets[cell.column], y: 0, width, height: natural }, collapsed, overflow: false, cell, natural };
+            });
+            for (let row = 0; row < grid.rows; row++) {
+                if (!active[row])
+                    rowHeights[row] = 0;
+                else if ((editing || grid.collapseEmptyRows === false) && ((_c = grid.rowHeights) === null || _c === void 0 ? void 0 : _c[row]) == null)
+                    rowHeights[row] = Math.max(40, rowHeights[row]);
+            }
+            // Spanning content grows only automatic rows. Fixed tracks remain fixed and report overflow.
+            for (const entry of entries.filter(e => e.cell && !e.collapsed && !e.node.decoration).sort((a, b) => a.cell.rowSpan - b.cell.rowSpan)) {
+                const cell = entry.cell;
+                if (cell.rowSpan === 1)
+                    continue;
+                const rows = Array.from({ length: cell.rowSpan }, (_, i) => cell.row + i);
+                const height = rows.reduce((total, row) => total + rowHeights[row], 0) + grid.rowGap * Math.max(0, rows.filter(row => active[row]).length - 1);
+                const flexible = rows.filter(row => { var _a; return ((_a = grid.rowHeights) === null || _a === void 0 ? void 0 : _a[row]) == null; });
+                if (height < entry.natural && flexible.length)
+                    for (const row of flexible)
+                        rowHeights[row] += (entry.natural - height) / flexible.length;
+            }
+            const rowOffsets = [];
+            let y = pad.top, hasRow = false;
+            for (let row = 0; row < grid.rows; row++) {
+                if (active[row] && rowHeights[row] > 0) {
+                    if (hasRow)
+                        y += grid.rowGap;
+                    rowOffsets.push(y);
+                    y += rowHeights[row];
+                    hasRow = true;
+                }
+                else
+                    rowOffsets.push(y);
+            }
+            grids[owner.id] = { columnOffsets, columnWidths, rowOffsets, rowHeights };
+            const children = entries.map(entry => {
+                const cell = entry.cell;
+                if (!cell)
+                    return entry;
+                const last = cell.row + cell.rowSpan - 1, cellHeight = rowOffsets[last] + rowHeights[last] - rowOffsets[cell.row];
+                let height = entry.node.kind === 'text' && entry.node.autoHeight !== false ? entry.natural : cellHeight;
+                if (entry.node.kind !== 'text' && entry.node.alignSelf && entry.node.alignSelf !== 'stretch')
+                    height = Math.min(cellHeight, entry.natural);
+                const offset = entry.node.alignSelf === 'center' ? (cellHeight - height) / 2 : entry.node.alignSelf === 'end' ? cellHeight - height : 0;
+                return { node: entry.node, frame: { ...entry.frame, y: rowOffsets[cell.row] + offset, height: entry.collapsed ? 0 : height }, collapsed: entry.collapsed,
+                    overflow: !entry.collapsed && ((entry.node.kind === 'text' && entry.natural > cellHeight + .5) || height > MAX_CONTENT_HEIGHT) };
+            });
+            return { children, height: Math.max(initial.height, Math.min(MAX_CONTENT_HEIGHT, y + pad.bottom)), empty: !entries.some(e => !e.collapsed && !e.node.decoration && e.node.kind !== 'spacer') };
+        };
+        const solveScope = (scopeID) => {
+            var _a;
+            const nodes = (_a = scopes.get(scopeID)) !== null && _a !== void 0 ? _a : [];
+            const byID = new Map(nodes.map(n => [n.id, n]));
+            const computed = new Map();
+            const pending = new Set();
+            const solve = (node) => {
+                var _a, _b;
+                const cached = computed.get(node.id);
+                if (cached)
+                    return cached;
+                const initial = (0, canvas_1.elementFrame)(node);
+                // Invalid imported/caller-created cycles are bounded even before document validation.
+                if (pending.has(node.id))
+                    return { node, frame: { ...initial, height: 0 }, collapsed: true, overflow: true };
+                pending.add(node.id);
+                let collapsed = node.visible === false || (node.kind === 'text' && ((_a = values[node.id]) !== null && _a !== void 0 ? _a : null) === null && node.hideWhenEmpty !== false);
+                let height = initial.height;
+                let overflow = false;
+                let children;
+                if (node.kind === 'text' && !collapsed) {
+                    const natural = measureNode(node, Math.max(1, initial.width));
+                    height = node.autoHeight === false ? initial.height : Math.min(MAX_CONTENT_HEIGHT, natural.height);
+                    overflow = natural.height > height + 0.5;
+                }
+                if (node.kind === 'stack' && node.layout === 'region' && !scopeID) {
+                    children = solveScope(node.id);
+                    const content = children.filter(c => !c.collapsed && !c.node.decoration && c.node.kind !== 'spacer');
+                    collapsed || (collapsed = node.collapseWhenEmpty !== false && content.length === 0);
+                    const padding = (_b = node.padding) !== null && _b !== void 0 ? _b : model_1.ZERO_PADDING;
+                    height = Math.max(initial.height, ...content.map(c => c.frame.y + c.frame.height + padding.bottom));
+                }
+                if (node.kind === 'stack' && node.layout === 'grid' && node.grid && !scopeID) {
+                    const resolved = solveGrid(node);
+                    children = resolved.children;
+                    height = resolved.height;
+                    collapsed || (collapsed = options.editingGridId !== node.id && node.collapseWhenEmpty !== false && resolved.empty);
+                }
+                let y = initial.y;
+                if (node.follow) {
+                    let target = byID.get(node.follow.targetId);
+                    const visited = new Set([node.id]);
+                    let earliestY = initial.y;
+                    while (target && !visited.has(target.id)) {
+                        visited.add(target.id);
+                        const resolved = solve(target);
+                        earliestY = (0, canvas_1.elementFrame)(target).y;
+                        if (!resolved.collapsed) {
+                            y = resolved.frame.y + resolved.frame.height + node.follow.gap;
+                            break;
+                        }
+                        target = target.follow ? byID.get(target.follow.targetId) : undefined;
+                        if (!target)
+                            y = earliestY;
+                    }
+                }
+                const value = { node, frame: { ...initial, y, height: collapsed ? 0 : Math.max(0, height) }, collapsed, overflow, children };
+                computed.set(node.id, value);
+                pending.delete(node.id);
+                return value;
+            };
+            return nodes.map(solve);
+        };
+        const top = solveScope('');
+        const padding = (_c = template.canvas.padding) !== null && _c !== void 0 ? _c : model_1.ZERO_PADDING;
+        const fixed = template.canvas.height === 'hug' ? null : Math.round(model_1.CANVAS_WIDTH * template.canvas.height.aspect);
+        const contentBottom = Math.max(0, ...top.filter(n => !n.collapsed && !n.node.decoration).map(n => n.frame.y + n.frame.height));
+        const height = fixed !== null && fixed !== void 0 ? fixed : Math.min(MAX_CONTENT_HEIGHT, Math.max(120, contentBottom + padding.top + padding.bottom));
+        const nodes = [];
+        const byID = {};
+        const overflow = new Set();
+        const root = { id: template.root.id, kind: 'stack', node: template.root,
+            frame: { x: padding.left, y: padding.top, width: Math.max(0, model_1.CANVAS_WIDTH - padding.left - padding.right), height: Math.max(0, height - padding.top - padding.bottom) },
+            rotation: (_d = template.root.rotation) !== null && _d !== void 0 ? _d : 0, opacity: (_e = template.root.opacity) !== null && _e !== void 0 ? _e : 1, collapsed: false, depth: 1 };
+        nodes.push(root);
+        byID[root.id] = root;
+        const emit = (entry, parent) => {
+            var _a, _b, _c;
+            const collapsed = entry.collapsed || parent.collapsed;
+            const laid = { id: entry.node.id, kind: entry.node.kind, node: entry.node,
+                frame: { ...entry.frame, x: parent.frame.x + entry.frame.x, y: parent.frame.y + entry.frame.y },
+                rotation: (_a = entry.node.rotation) !== null && _a !== void 0 ? _a : 0, opacity: collapsed ? 0 : parent.opacity * ((_b = entry.node.opacity) !== null && _b !== void 0 ? _b : 1),
+                collapsed, depth: parent.depth + 1, parent: parent.id };
+            byID[laid.id] = laid;
+            if (!collapsed) {
+                nodes.push(laid);
+                if (entry.overflow || (!entry.node.decoration && (laid.frame.x < 0 || laid.frame.x + laid.frame.width > model_1.CANVAS_WIDTH + 0.5 || laid.frame.y < 0 || laid.frame.y + laid.frame.height > height + 0.5)))
+                    overflow.add(laid.id);
+            }
+            for (const child of (_c = entry.children) !== null && _c !== void 0 ? _c : [])
+                emit(child, laid);
+        };
+        top.forEach(entry => emit(entry, root));
+        // A missing owner cannot cause a node to disappear from the editor's recovery list.
+        for (const node of source)
+            if (!byID[node.id])
+                byID[node.id] = { id: node.id, kind: node.kind, node, frame: (0, canvas_1.elementFrame)(node), rotation: (_f = node.rotation) !== null && _f !== void 0 ? _f : 0, opacity: 0, collapsed: true, depth: 2, parent: root.id };
+        return { width: model_1.CANVAS_WIDTH, height, nodes, byID, grids, overflow: [...overflow] };
+    }
+
+  });
+
+  define("core/template/fontCatalog", function (module, exports, require) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MAX_IMPORTED_FONT_BYTES = exports.DEFAULT_POSTER_FONT_ID = exports.FONT_CATALOG = void 0;
+    exports.posterFont = posterFont;
+    exports.posterFontFamily = posterFontFamily;
+    exports.posterFontFallback = posterFontFallback;
+    exports.posterFontChain = posterFontChain;
+    exports.posterFontWeight = posterFontWeight;
+    exports.fontFileWeight = fontFileWeight;
+    exports.fontFileVariations = fontFileVariations;
+    /** All eight entries are distinct, bundled OFL fonts, not aliases of system fonts. */
+    exports.FONT_CATALOG = [
+        { id: 'noto-sans-sc', name: '思源黑体', latinName: 'Noto Sans SC', category: 'sans', coverage: 'chinese', file: 'NotoSansSC.ttf', boldFile: 'NotoSansSC-Bold.ttf', sample: '把这一刻，留给以后', license: 'noto-sans-sc-OFL.txt' },
+        { id: 'noto-serif-sc', name: '思源宋体', latinName: 'Noto Serif SC', category: 'serif', coverage: 'chinese', file: 'NotoSerifSC.ttf', boldFile: 'NotoSerifSC-Bold.ttf', sample: '愿我们总有歌可唱', license: 'noto-serif-sc-OFL.txt' },
+        { id: 'lxgw-wenkai', name: '霞鹜文楷', latinName: 'LXGW WenKai TC', category: 'handwriting', coverage: 'chinese', file: 'LXGWWenKaiTC-Regular.ttf', boldFile: 'LXGWWenKaiTC-Bold.ttf', sample: '见过你，便不算辜负', license: 'lxgw-wenkai-OFL.txt' },
+        { id: 'zcool-xiaowei', name: '站酷小薇体', latinName: 'ZCOOL XiaoWei', category: 'display', coverage: 'chinese', file: 'ZCOOLXiaoWei-Regular.ttf', sample: '今夜的星光与回声', license: 'zcool-xiaowei-OFL.txt' },
+        { id: 'space-grotesk', name: '太空黑体', latinName: 'Space Grotesk', category: 'sans', coverage: 'latin', file: 'SpaceGrotesk.ttf', boldFile: 'SpaceGrotesk-Bold.ttf', fallbackId: 'noto-sans-sc', sample: 'LIVE / 留住现场 2026', license: 'space-grotesk-OFL.txt' },
+        { id: 'playfair', name: '优雅衬线', latinName: 'Playfair Display', category: 'serif', coverage: 'latin', file: 'PlayfairDisplay.ttf', boldFile: 'PlayfairDisplay-Bold.ttf', fallbackId: 'noto-serif-sc', sample: 'Encore / 再见一面', license: 'playfair-OFL.txt' },
+        { id: 'cormorant', name: '古典书刊', latinName: 'Cormorant Garamond', category: 'serif', coverage: 'latin', file: 'CormorantGaramond.ttf', boldFile: 'CormorantGaramond-Bold.ttf', fallbackId: 'noto-serif-sc', sample: 'A Night to Remember / 记忆', license: 'cormorant-OFL.txt' },
+        { id: 'caveat', name: '随手写', latinName: 'Caveat', category: 'handwriting', coverage: 'latin', file: 'Caveat.ttf', boldFile: 'Caveat-Bold.ttf', fallbackId: 'lxgw-wenkai', sample: 'Wish you were here / 想见你', license: 'caveat-OFL.txt' },
+    ];
+    exports.DEFAULT_POSTER_FONT_ID = 'noto-sans-sc';
+    exports.MAX_IMPORTED_FONT_BYTES = 32 * 1024 * 1024;
+    function posterFont(id) {
+        return id ? exports.FONT_CATALOG.find((font) => font.id === id) : undefined;
+    }
+    /** Stable alias shared by Skia and the standalone web editor. */
+    function posterFontFamily(id) {
+        return `LivemarkPoster_${id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    }
+    function posterFontFallback(id) {
+        var _a, _b;
+        return (_b = (_a = posterFont(id)) === null || _a === void 0 ? void 0 : _a.fallbackId) !== null && _b !== void 0 ? _b : (id === exports.DEFAULT_POSTER_FONT_ID ? undefined : exports.DEFAULT_POSTER_FONT_ID);
+    }
+    function posterFontChain(id) {
+        const result = [];
+        let current = id;
+        while (current && !result.includes(current)) {
+            result.push(current);
+            current = posterFontFallback(current);
+        }
+        return result;
+    }
+    /** Do not ask a renderer to synthesize an unavailable weight. */
+    function posterFontWeight(id, requested, importedWeight = 400) {
+        const font = posterFont(id);
+        if (!font)
+            return importedWeight;
+        return font.boldFile && requested >= 550 ? 700 : 400;
+    }
+    /** SFNT's default weight (also the default instance of a variable TTF). */
+    function fontFileWeight(bytes) {
+        const variation = fontFileVariations(bytes).find((axis) => axis.tag === 'wght');
+        if (variation)
+            return Math.max(1, Math.min(1000, Math.round(variation.value)));
+        if (bytes.byteLength < 12)
+            return 400;
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const count = view.getUint16(4, false);
+        if (count > 256 || 12 + count * 16 > bytes.length)
+            return 400;
+        for (let index = 0; index < count; index += 1) {
+            const position = 12 + index * 16;
+            const tag = String.fromCharCode(...bytes.subarray(position, position + 4));
+            const offset = view.getUint32(position + 8, false);
+            const length = view.getUint32(position + 12, false);
+            if (tag === 'OS/2' && length >= 8 && offset + 8 <= bytes.length) {
+                const weight = view.getUint16(offset + 4, false);
+                return weight >= 1 && weight <= 1000 ? weight : 400;
+            }
+        }
+        return 400;
+    }
+    /** Browser FontFace can pin every variable axis to the instance Skia actually loads. */
+    function fontFileVariations(bytes) {
+        if (bytes.byteLength < 12)
+            return [];
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const count = view.getUint16(4, false);
+        if (count > 256 || 12 + count * 16 > bytes.length)
+            return [];
+        for (let index = 0; index < count; index += 1) {
+            const position = 12 + index * 16;
+            const tag = String.fromCharCode(...bytes.subarray(position, position + 4));
+            if (tag !== 'fvar')
+                continue;
+            const offset = view.getUint32(position + 8, false);
+            const length = view.getUint32(position + 12, false);
+            if (length < 16 || offset + length > bytes.length)
+                return [];
+            const axesOffset = view.getUint16(offset + 4, false);
+            const axisCount = view.getUint16(offset + 8, false);
+            const axisSize = view.getUint16(offset + 10, false);
+            if (axisCount > 64 || axisSize < 20 || axesOffset + axisCount * axisSize > length)
+                return [];
+            const result = [];
+            for (let axis = 0; axis < axisCount; axis += 1) {
+                const start = offset + axesOffset + axis * axisSize;
+                const axisTag = String.fromCharCode(...bytes.subarray(start, start + 4));
+                if (/^[A-Za-z0-9 ]{4}$/.test(axisTag))
+                    result.push({ tag: axisTag, value: view.getInt32(start + 8, false) / 65536 });
+            }
+            return result;
+        }
+        return [];
+    }
+
+  });
+
   define("core/template/model", function (module, exports, require) {
     "use strict";
-    // 分享模版的纯数据模型（海报体系 v2：响应式盒子树）。
+    // 分享模版的纯数据模型（v3：自由画布、平面对象、有限内容跟随）。
     // 设计规格见 Documentation/POSTER.md 第 1 节。
     //
-    // v1 是「一张固定比例的画布上堆绝对定位的元素」；v2 改成一棵盒子树：
-    // 每个 stack 按 Figma Auto Layout / CSS flex 的规则摆放子节点，字段没值时那一块整个收起，
-    // 画布高度跟着内容走。排版规则不在这里，在 layout.ts；这里只有数据：默认值、取值范围、
-    // 清洗（sanitize）、树的编辑操作，以及「一个字段印什么字」。
-    //
-    // 不 import react / react-native / expo；随机数与时间可注入，方便测试。
-    // 长度单位一律是 pt，画布宽固定 360 pt；导出时整棵树按 exportWidth / 360 放大。
+    // 新文档的 root 只是平面对象集合，regionId / follow 表达有限的内容适配。
+    // 不 import react / react-native / expo；随机数与时间可注入。
+    // 长度使用 360 pt 逻辑画布；显示缩放与导出分辨率不改变文档坐标。
+    // 老的 StackNode 辅助类型保留为内部调用接口，编辑器不暴露行列树。
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.STARTERS = exports.TEMPLATE_NODE_KINDS = exports.ZERO_PADDING = exports.ANCHORS = exports.JUSTIFIES = exports.ALIGNS = exports.TEMPLATE_FIELD_GROUPS = exports.TEMPLATE_FIELDS = exports.TEMPLATE_SHAPES = exports.TEMPLATE_ACCENTS = exports.TEMPLATE_ALIGNMENTS = exports.TEMPLATE_FONT_DESIGNS = exports.TEMPLATE_WEIGHTS = exports.COLOR_PRESETS = exports.Palette = exports.IMAGE_ASPECT_PRESETS = exports.ASPECT_PRESETS = exports.TILT_RANGE = exports.ZOOM_RANGE = exports.FOCUS_RANGE = exports.IMAGE_ASPECT_RANGE = exports.GROW_RANGE = exports.OFFSET_RANGE = exports.FRACTION_RANGE = exports.SIZE_RANGE = exports.BORDER_RANGE = exports.DASH_RANGE = exports.STROKE_RANGE = exports.CORNER_RADIUS_RANGE = exports.PADDING_RANGE = exports.GAP_RANGE = exports.OPACITY_RANGE = exports.ROTATION_RANGE = exports.LINE_LIMIT_RANGE = exports.TRACKING_RANGE = exports.FONT_SIZE_RANGE = exports.MAX_NAME_LENGTH = exports.MAX_DEPTH = exports.MAX_NODES = exports.DEFAULT_TEMPLATE_NAME = exports.ASPECT_RANGE = exports.EXPORT_WIDTH_RANGE = exports.EXPORT_WIDTH_PRESETS = exports.DEFAULT_EXPORT_WIDTH = exports.CANVAS_WIDTH = void 0;
     exports.makeColor = makeColor;
@@ -89,6 +2500,7 @@
     exports.isSpacerNode = isSpacerNode;
     exports.defaultShapeHeight = defaultShapeHeight;
     exports.defaultCanvas = defaultCanvas;
+    exports.defaultFontID = defaultFontID;
     exports.defaultTextNode = defaultTextNode;
     exports.makeTextNode = makeTextNode;
     exports.makeImageNode = makeImageNode;
@@ -119,6 +2531,7 @@
     exports.unwrapNode = unwrapNode;
     exports.sanitizeSizeRule = sanitizeSizeRule;
     exports.sanitizePadding = sanitizePadding;
+    exports.sanitizeGrid = sanitizeGrid;
     exports.sanitizeNode = sanitizeNode;
     exports.sanitizeCanvasImage = sanitizeCanvasImage;
     exports.sanitizeCanvas = sanitizeCanvas;
@@ -567,6 +2980,9 @@
             background: { ...exports.Palette.cream },
         };
     }
+    function defaultFontID(design) {
+        return { 黑体: 'noto-sans-sc', 宋体: 'noto-serif-sc', 圆体: 'lxgw-wenkai', 等宽: 'space-grotesk' }[design];
+    }
     function defaultTextNode(field, env) {
         return {
             kind: 'text',
@@ -577,6 +2993,7 @@
             fontSize: suggestedSize(field),
             weight: suggestedWeight(field),
             design: suggestedDesign(field),
+            fontId: defaultFontID(suggestedDesign(field)),
             alignment: '左对齐',
             color: { ...exports.Palette.ink },
             // 全大写的英文小字排得开一点才好看，和 v1 的 makeElement 一致。
@@ -586,7 +3003,9 @@
         };
     }
     function makeTextNode(field, overrides = {}, env) {
-        return definedOnly({ ...defaultTextNode(field, env), ...overrides, kind: 'text', field });
+        var _a, _b;
+        const base = defaultTextNode(field, env);
+        return definedOnly({ ...base, ...overrides, fontId: (_a = overrides.fontId) !== null && _a !== void 0 ? _a : defaultFontID((_b = overrides.design) !== null && _b !== void 0 ? _b : base.design), kind: 'text', field });
     }
     function makeImageNode(source, overrides = {}, env) {
         const base = {
@@ -631,7 +3050,7 @@
             id: e.newID(),
             name: exports.DEFAULT_TEMPLATE_NAME,
             canvas: defaultCanvas(),
-            root: makeStackNode('column', { gap: 12 }, env),
+            root: makeStackNode('column', { layout: 'canvas' }, env),
             createdAt: now,
             updatedAt: now,
         };
@@ -903,6 +3322,14 @@
             return { asset: asset };
         return undefined;
     }
+    function sanitizeHandwriting(raw) {
+        if (!raw || typeof raw !== 'object')
+            return undefined;
+        const value = raw;
+        if (!['pencilkit', 'strokes-v1'].includes(value.format) || typeof value.data !== 'string')
+            return undefined;
+        return definedOnly({ format: value.format, data: value.data, portableStrokes: typeof value.portableStrokes === 'string' ? value.portableStrokes : undefined, width: clamp(value.width, [1, 20000], 360), height: clamp(value.height, [1, 20000], 240) });
+    }
     function sanitizeFrameAspect(raw) {
         if (raw === 'natural')
             return 'natural';
@@ -915,9 +3342,71 @@
         context.seen.add(unique);
         return unique;
     }
+    function sanitizeFrame(raw) {
+        if (!raw || typeof raw !== 'object')
+            return undefined;
+        const value = raw;
+        return {
+            x: clamp(value.x, [-20000, 20000], 0), y: clamp(value.y, [-20000, 20000], 0),
+            width: clamp(value.width, [1, 20000], 120), height: clamp(value.height, [0, 20000], 32),
+        };
+    }
+    function referenceID(raw) {
+        return typeof raw === 'string' && raw.length > 0 ? (isUUID(raw) ? raw.toUpperCase() : prefixChars(raw, 100)) : undefined;
+    }
+    function sanitizeFollow(raw) {
+        if (!raw || typeof raw !== 'object')
+            return undefined;
+        const value = raw;
+        const targetId = referenceID(value.targetId);
+        return targetId ? { targetId, gap: clamp(value.gap, [0, 2000], 12) } : undefined;
+    }
+    function sanitizeGrid(raw) {
+        if (!raw || typeof raw !== 'object')
+            return undefined;
+        const value = raw;
+        const rows = Math.round(clamp(value.rows, [1, 64], 2)), columns = Math.round(clamp(value.columns, [1, 12], 2));
+        const merges = (Array.isArray(value.merges) ? value.merges : []).slice(0, 768).map(cell => ({
+            row: Math.round(clamp(cell === null || cell === void 0 ? void 0 : cell.row, [0, rows - 1], 0)), column: Math.round(clamp(cell === null || cell === void 0 ? void 0 : cell.column, [0, columns - 1], 0)),
+            rowSpan: Math.round(clamp(cell === null || cell === void 0 ? void 0 : cell.rowSpan, [1, rows], 1)), colSpan: Math.round(clamp(cell === null || cell === void 0 ? void 0 : cell.colSpan, [1, columns], 1)),
+        })).filter(cell => cell.rowSpan > 1 || cell.colSpan > 1);
+        return definedOnly({ rows, columns, columnGap: clamp(value.columnGap, [0, 120], 12), rowGap: clamp(value.rowGap, [0, 120], 12),
+            columnWeights: Array.isArray(value.columnWeights) ? Array.from({ length: columns }, (_, i) => clamp(value.columnWeights[i], [.05, 100], 1)) : undefined,
+            rowHeights: Array.isArray(value.rowHeights) ? Array.from({ length: rows }, (_, i) => value.rowHeights[i] == null ? null : clamp(value.rowHeights[i], [1, 2000], 40)) : undefined,
+            collapseEmptyRows: dropDefault(optionalBool(value.collapseEmptyRows), true), merges: merges.length ? merges : undefined });
+    }
+    function sanitizeFontAssets(raw) {
+        if (!Array.isArray(raw))
+            return undefined;
+        const seen = new Set();
+        const assets = [];
+        for (const item of raw.slice(0, 12)) {
+            if (!item || typeof item !== 'object' || !item.id || typeof item.data !== 'string' || !['ttf', 'otf'].includes(item.format))
+                continue;
+            const id = referenceID(item.id);
+            if (seen.has(id))
+                continue;
+            seen.add(id);
+            assets.push(definedOnly({ id, name: prefixChars(item.name || id, 100), data: item.data, format: item.format, weight: optionalClamp(item.weight, [1, 1000], 400),
+                sha256: typeof item.sha256 === 'string' ? item.sha256 : undefined,
+                license: typeof item.license === 'string' ? prefixChars(item.license, 2000) : undefined }));
+        }
+        return assets.length ? assets : undefined;
+    }
     function sanitizeBase(raw, context) {
         return definedOnly({
             id: takeID(raw.id, context),
+            name: typeof raw.name === 'string' && raw.name.trim() ? prefixChars(raw.name.trim(), 80) : undefined,
+            frame: sanitizeFrame(raw.frame),
+            locked: dropDefault(optionalBool(raw.locked), false),
+            groupId: referenceID(raw.groupId),
+            regionId: referenceID(raw.regionId),
+            cell: raw.cell && typeof raw.cell === 'object' ? {
+                row: Math.round(clamp(raw.cell.row, [0, 63], 0)),
+                column: Math.round(clamp(raw.cell.column, [0, 11], 0)),
+            } : undefined,
+            decoration: dropDefault(optionalBool(raw.decoration), false),
+            follow: sanitizeFollow(raw.follow),
             visible: dropDefault(optionalBool(raw.visible), true),
             opacity: dropDefault(optionalClamp(raw.opacity, exports.OPACITY_RANGE, 1), 1),
             rotation: dropDefault(optionalClamp(raw.rotation, exports.ROTATION_RANGE, 0), 0),
@@ -937,7 +3426,7 @@
         });
     }
     function sanitizeNodeIn(raw, context, depth) {
-        var _a, _b, _c, _d, _e, _f, _g;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
         // 超过上限的节点整个丢掉：树再怎么手改，排版的代价都有上界。
         if (!raw || typeof raw !== 'object' || Array.isArray(raw))
             return null;
@@ -961,6 +3450,8 @@
                 return definedOnly({
                     ...base,
                     kind: 'stack',
+                    layout: enumOrUndefined(value.layout, ['canvas', 'region', 'grid']),
+                    grid: sanitizeGrid(value.grid),
                     direction: value.direction === 'row' ? 'row' : 'column',
                     gap: dropDefault(optionalClamp(value.gap, exports.GAP_RANGE, 0), 0),
                     padding: sanitizePadding(value.padding),
@@ -979,14 +3470,18 @@
                 return definedOnly({
                     ...base,
                     kind: 'text',
-                    field: (_a = enumOrUndefined(value.field, exports.TEMPLATE_FIELDS)) !== null && _a !== void 0 ? _a : '自定义文字',
-                    text: prefixChars((_b = value.text) !== null && _b !== void 0 ? _b : '', 300),
-                    label: prefixChars((_c = value.label) !== null && _c !== void 0 ? _c : '', 40),
+                    binding: value.binding && typeof value.binding === 'object' && value.binding.kind === 'custom' && referenceID(value.binding.definitionId)
+                        ? { kind: 'custom', definitionId: referenceID(value.binding.definitionId), name: prefixChars((_a = value.binding.name) !== null && _a !== void 0 ? _a : '自定义词条', 100) } : undefined,
+                    fontId: (_b = referenceID(value.fontId)) !== null && _b !== void 0 ? _b : defaultFontID((_c = enumOrUndefined(value.design, exports.TEMPLATE_FONT_DESIGNS)) !== null && _c !== void 0 ? _c : '黑体'),
+                    autoHeight: dropDefault(optionalBool(value.autoHeight), true),
+                    field: (_d = enumOrUndefined(value.field, exports.TEMPLATE_FIELDS)) !== null && _d !== void 0 ? _d : '自定义文字',
+                    text: prefixChars((_e = value.text) !== null && _e !== void 0 ? _e : '', 30000),
+                    label: prefixChars((_f = value.label) !== null && _f !== void 0 ? _f : '', 40),
                     inlineLabel: dropDefault(optionalBool(value.inlineLabel), false),
                     fontSize: clamp(value.fontSize, exports.FONT_SIZE_RANGE, 12),
-                    weight: (_d = enumOrUndefined(value.weight, exports.TEMPLATE_WEIGHTS)) !== null && _d !== void 0 ? _d : '常规',
-                    design: (_e = enumOrUndefined(value.design, exports.TEMPLATE_FONT_DESIGNS)) !== null && _e !== void 0 ? _e : '黑体',
-                    alignment: (_f = enumOrUndefined(value.alignment, exports.TEMPLATE_ALIGNMENTS)) !== null && _f !== void 0 ? _f : '左对齐',
+                    weight: (_g = enumOrUndefined(value.weight, exports.TEMPLATE_WEIGHTS)) !== null && _g !== void 0 ? _g : '常规',
+                    design: (_h = enumOrUndefined(value.design, exports.TEMPLATE_FONT_DESIGNS)) !== null && _h !== void 0 ? _h : '黑体',
+                    alignment: (_j = enumOrUndefined(value.alignment, exports.TEMPLATE_ALIGNMENTS)) !== null && _j !== void 0 ? _j : '左对齐',
                     color: clampColor(value.color),
                     accent: accentOrUndefined(value.accent),
                     tracking: clamp(value.tracking, exports.TRACKING_RANGE, 0),
@@ -1000,6 +3495,7 @@
                 return definedOnly({
                     ...base,
                     kind: 'image',
+                    handwriting: sanitizeHandwriting(value.handwriting),
                     source: sanitizeImageSource(value.source),
                     imageAspect: optionalClamp(value.imageAspect, exports.IMAGE_ASPECT_RANGE, 1),
                     isSticker: dropDefault(optionalBool(value.isSticker), false),
@@ -1018,7 +3514,7 @@
                 return definedOnly({
                     ...base,
                     kind: 'shape',
-                    shape: (_g = enumOrUndefined(value.shape, exports.TEMPLATE_SHAPES)) !== null && _g !== void 0 ? _g : '矩形',
+                    shape: (_k = enumOrUndefined(value.shape, exports.TEMPLATE_SHAPES)) !== null && _k !== void 0 ? _k : '矩形',
                     color: clampColor(value.color),
                     accent: accentOrUndefined(value.accent),
                     cornerRadius: dropDefault(optionalClamp(value.cornerRadius, exports.CORNER_RADIUS_RANGE, 0), 0),
@@ -1093,14 +3589,15 @@
                 direction: 'column',
                 children: sanitizedRoot ? [sanitizedRoot] : [],
             };
-        return {
+        return definedOnly({
+            fontAssets: sanitizeFontAssets(value.fontAssets),
             id: isUUID(value.id) ? String(value.id).toUpperCase() : context.env.newID(),
             name: trimmed || exports.DEFAULT_TEMPLATE_NAME,
             canvas: sanitizeCanvas(value.canvas),
             root,
             createdAt: typeof value.createdAt === 'string' ? value.createdAt : context.env.now(),
             updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : context.env.now(),
-        };
+        });
     }
     // MARK: - 起始排版
     exports.STARTERS = [
@@ -1118,100 +3615,27 @@
      */
     function starterTemplate(starter, name, env) {
         const base = defaultTemplate(env);
-        const stack = (direction, overrides, children) => makeStackNode(direction, { ...overrides, children }, env);
-        const text = (field, overrides) => makeTextNode(field, overrides, env);
-        const cover = (overrides) => makeImageNode('cover', overrides, env);
-        // 过一遍 sanitize：起点因此和从文件里读回来的模版一模一样（规范形）。
-        const template = (canvas, root) => sanitizeTemplate({ ...base, name: name !== null && name !== void 0 ? name : starter, canvas, root }, env);
-        switch (starter) {
-            case '拍立得':
-                return template({
-                    ...defaultCanvas(),
-                    padding: padding(20, 24),
-                    background: colorFromHex(0xf2ecdd),
-                }, stack('column', { gap: 14 }, [
-                    stack('row', { gap: 8, align: 'center' }, [
-                        text('余响标识', { fontSize: 12, lineLimit: 1 }),
-                        text('英文类型', { fontSize: 8, alignment: '右对齐', lineLimit: 1 }),
-                    ]),
-                    cover({ aspect: 0.92, cornerRadius: 2, border: 12, shadow: true, rotation: -2 }),
-                    text('名称', { fontSize: 22, alignment: '居中', lineLimit: 2 }),
-                    text('日期', { fontSize: 11, alignment: '居中', lineLimit: 1 }),
-                    text('开场白', {
-                        fontSize: 10,
-                        design: '宋体',
-                        alignment: '居中',
-                        lineLimit: 1,
-                        opacity: 0.7,
-                    }),
-                ]));
-            case '展览海报':
-                return template({
-                    ...defaultCanvas(),
-                    height: { aspect: 1.5 },
-                    padding: exports.ZERO_PADDING,
-                    background: { ...exports.Palette.night },
-                },
-                // 封面是 flow 的、撑满整张画布；字压在它上面，所以走绝对定位（画在 flow 之后）。
-                stack('column', {}, [
-                    cover({ height: 'fill', cornerRadius: 0 }),
-                    stack('column', {
-                        position: 'absolute',
-                        anchor: 'center',
-                        height: 'fill',
-                        padding: padding(28, 24),
-                        gap: 8,
-                    }, [
-                        stack('row', { gap: 8, align: 'center' }, [
-                            text('英文类型', { fontSize: 9, lineLimit: 1, color: { ...exports.Palette.white } }),
-                            text('余响标识', {
-                                fontSize: 14,
-                                alignment: '右对齐',
-                                lineLimit: 1,
-                                color: { ...exports.Palette.white },
-                            }),
-                        ]),
-                        makeSpacerNode(env),
-                        text('名称', { fontSize: 36, lineLimit: 3, color: { ...exports.Palette.white } }),
-                        text('城市与场馆', {
-                            fontSize: 11,
-                            lineLimit: 1,
-                            color: { ...exports.Palette.white },
-                            opacity: 0.85,
-                        }),
-                        text('数字日期', {
-                            fontSize: 11,
-                            lineLimit: 1,
-                            color: { ...exports.Palette.white },
-                            opacity: 0.85,
-                        }),
-                    ]),
-                ]));
-            case '信息票根':
-                return template({ ...defaultCanvas(), padding: padding(22, 24), background: { ...exports.Palette.cream } }, stack('column', { gap: 12 }, [
-                    cover({ aspect: 0.78, cornerRadius: 14, shadow: true }),
-                    text('开场白', {
-                        fontSize: 10,
-                        weight: '半粗',
-                        color: colorFromHex(0x6e58a8),
-                        tracking: 2,
-                        lineLimit: 1,
-                    }),
-                    text('名称', { fontSize: 26, lineLimit: 2 }),
-                    stack('row', { gap: 12 }, [
-                        text('日期', { fontSize: 11, label: 'DATE', lineLimit: 1 }),
-                        text('城市与场馆', { fontSize: 11, label: 'VENUE', alignment: '右对齐', lineLimit: 2 }),
-                    ]),
-                    text('金句', { fontSize: 14, lineLimit: 3 }),
-                    stack('row', { gap: 12, align: 'center' }, [
-                        text('署名', { fontSize: 8, lineLimit: 1 }),
-                        text('条码', { fontSize: 12, width: 'hug', alignment: '右对齐', lineLimit: 1 }),
-                    ]),
-                ]));
-            default:
-                // 空白画布给一个固定比例，不然空树的画布只有内边距那么高，没处下手。
-                return template({ ...defaultCanvas(), height: { aspect: 1.4 } }, makeStackNode('column', { gap: 12 }, env));
+        const nodes = [];
+        const width = 312;
+        if (starter !== '空白画布') {
+            const cover = makeImageNode('cover', { frame: { x: 0, y: 0, width, height: starter === '展览海报' ? 380 : 250 },
+                border: starter === '拍立得' ? 12 : 0, cornerRadius: 4, shadow: starter === '拍立得' }, env);
+            const title = makeTextNode('名称', { frame: { x: 0, y: 0, width, height: 40 }, fontSize: 28,
+                follow: { targetId: cover.id, gap: 18 } }, env);
+            const date = makeTextNode('日期', { frame: { x: 0, y: 0, width, height: 22 }, fontSize: 12,
+                follow: { targetId: title.id, gap: 10 } }, env);
+            const venue = makeTextNode('城市与场馆', { frame: { x: 0, y: 0, width, height: 22 }, fontSize: 12,
+                follow: { targetId: date.id, gap: 6 } }, env);
+            const quote = makeTextNode('金句', { frame: { x: 0, y: 0, width, height: 22 }, fontSize: 15,
+                follow: { targetId: venue.id, gap: 18 }, design: '宋体' }, env);
+            const information = makeStackNode('column', { name: '文字与信息', layout: 'grid', children: [],
+                frame: { x: 0, y: 0, width, height: 0 }, follow: { targetId: cover.id, gap: 18 },
+                grid: { rows: 3, columns: 2, rowGap: 12, columnGap: 16, merges: [{ row: 0, column: 0, colSpan: 2 }, { row: 2, column: 0, colSpan: 2 }] } }, env);
+            nodes.push(cover, information, { ...title, regionId: information.id, cell: { row: 0, column: 0 }, follow: undefined }, { ...date, regionId: information.id, cell: { row: 1, column: 0 }, follow: undefined }, { ...venue, regionId: information.id, cell: { row: 1, column: 1 }, follow: undefined }, { ...quote, regionId: information.id, cell: { row: 2, column: 0 }, follow: undefined });
         }
+        return sanitizeTemplate({ ...base, name: name !== null && name !== void 0 ? name : starter,
+            canvas: { ...base.canvas, height: starter === '空白画布' ? { aspect: 1.4 } : 'hug' },
+            root: { ...base.root, layout: 'canvas', children: nodes } }, env);
     }
     function defaultPosterOptions() {
         return {
@@ -1443,6 +3867,9 @@
 
   define("core/template/layout", function (module, exports, require) {
     "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.layoutTemplate = layoutTemplate;
+    const canvasLayout_1 = require("./canvasLayout");
     // 海报的排版引擎：一棵盒子树 + 一份「这条记录里每个文字节点印什么」→ 一串带 frame 的图元。
     // 设计规格见 Documentation/POSTER.md 第 2 节。
     //
@@ -1458,8 +3885,6 @@
     // 性能：一次排版只走一遍树，除 measure 外全是加减乘；120 个节点远在 1 ms 以内。
     // measure 的调用次数 = text 节点数：每个节点在最终宽度上量一次；宽度规则是 hug 的还要先量一次
     // 「不换行的固有宽」（maxWidth = Infinity），所以最多两次，同一个请求由缓存兜住。
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.layoutTemplate = layoutTemplate;
     const model_1 = require("./model");
     function finite(value, fallback = 0) {
         return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -1547,6 +3972,7 @@
             label: node.label,
             inlineLabel: !!node.inlineLabel,
             fontSize: node.fontSize,
+            fontId: node.fontId,
             weight: node.weight,
             design: node.design,
             alignment: node.alignment,
@@ -1834,8 +4260,10 @@
         return box;
     }
     // MARK: - 规则 6 / 7 / 8：画的顺序、旋转、画布
-    function layoutTemplate(template, values, measure) {
+    function layoutTemplate(template, values, measure, options = {}) {
         var _a;
+        if (template.root.layout === 'canvas')
+            return (0, canvasLayout_1.layoutCanvas)(template, values, measure, options);
         const context = {
             values: values !== null && values !== void 0 ? values : {},
             measure,
@@ -1907,20 +4335,6 @@
 
   define("core/template/document", function (module, exports, require) {
     "use strict";
-    // `.lmtemplate` 文件（版本 2：响应式盒子树）。设计规格见 Documentation/POSTER.md 第 6 节。
-    //
-    // 文件只带模版和它的图，别的什么都没有：没有记录、没有设置、没有私人字段。
-    // 导入永远换一个新身份，所以收到别人的文件不会盖掉自己已有的模版。
-    //
-    // 编码规范：键按字典序（`stableStringify`）、日期 ISO-8601 无小数秒、图为 base64、
-    // UUID 大写连字符、**等于缺省值的字段整把省掉**（visible / opacity / rotation / position /
-    // fit / focus / zoom / tilt / hideWhenEmpty / collapseWhenEmpty …）。
-    // 解码宽松：每个字段 `?? 默认值`，不认识的 kind 跳过，坏节点跳过而不是整份失败——
-    // 这两件事都由 model.ts 的 `sanitizeTemplate` 做，所以「解码」就是「清洗」。
-    //
-    // `encodeTemplate` 同时是档案里的形状：v2 模版存在档案的新键 `posterTemplates` 下
-    // （Swift 版的 `shareTemplates` 原样保留、不读不写）。文件里不许有资产引用，
-    // 档案里可以，所以剥离资产是 `encodeTemplateDocument` 的事，不是 `encodeTemplate` 的事。
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.TemplateDocumentError = exports.MAX_FILE_BYTES = exports.MAX_VIDEO_BYTES = exports.MAX_BYTES = exports.TEMPLATE_CONTENT_TYPE = exports.TEMPLATE_FILE_EXTENSIONS = exports.LEGACY_TEMPLATE_FILE_EXTENSIONS = exports.TEMPLATE_FILE_EXTENSION = exports.TEMPLATE_DOCUMENT_APP = exports.TEMPLATE_DOCUMENT_VERSION = void 0;
     exports.utf8ByteLength = utf8ByteLength;
@@ -1938,9 +4352,25 @@
     exports.isTemplateFileName = isTemplateFileName;
     exports.looksLikeTemplateDocument = looksLikeTemplateDocument;
     exports.templateDocumentBody = templateDocumentBody;
+    const fontCatalog_1 = require("./fontCatalog");
+    const canvas_1 = require("./canvas");
+    // `.livemark` 模版文件版本 3：平面画布、内容跟随、字体与可编辑手写资产。
+    //
+    // 文件只带模版和它的图，别的什么都没有：没有记录、没有设置、没有私人字段。
+    // 导入永远换一个新身份，所以收到别人的文件不会盖掉自己已有的模版。
+    //
+    // 编码规范：键按字典序（`stableStringify`）、日期 ISO-8601 无小数秒、资产为 base64、
+    // UUID 大写连字符、**等于缺省值的字段整把省掉**（visible / opacity / rotation / position /
+    // fit / focus / zoom / tilt / hideWhenEmpty / collapseWhenEmpty …）。
+    // 解码宽松：每个字段 `?? 默认值`，不认识的 kind 跳过，坏节点跳过而不是整份失败——
+    // 这两件事都由 model.ts 的 `sanitizeTemplate` 做，所以「解码」就是「清洗」。
+    //
+    // `encodeTemplate` 同时是档案里的形状：v3 模版存在档案键 `posterTemplates` 下
+    // （Swift 版的 `shareTemplates` 原样保留、不读不写）。文件里不许有资产引用，
+    // 档案里可以，所以剥离资产是 `encodeTemplateDocument` 的事，不是 `encodeTemplate` 的事。
     const model_1 = require("./model");
     // MARK: - 常量
-    exports.TEMPLATE_DOCUMENT_VERSION = 2;
+    exports.TEMPLATE_DOCUMENT_VERSION = 3;
     exports.TEMPLATE_DOCUMENT_APP = 'Livemark';
     /**
      * 0.11.0 build 31 起模版和备份一样写成 `.livemark`（gzip 过的 JSON，见 core/gzip.ts）；
@@ -2127,6 +4557,22 @@
      */
     function encodeNode(node) {
         const out = { id: node.id, kind: node.kind };
+        if (node.frame)
+            out.frame = { ...node.frame };
+        if (node.name)
+            out.name = node.name;
+        if (node.locked)
+            out.locked = true;
+        if (node.groupId)
+            out.groupId = node.groupId;
+        if (node.regionId)
+            out.regionId = node.regionId;
+        if (node.cell)
+            out.cell = { ...node.cell };
+        if (node.decoration)
+            out.decoration = true;
+        if (node.follow)
+            out.follow = { ...node.follow };
         if (node.visible === false)
             out.visible = false;
         if (node.opacity !== undefined)
@@ -2159,6 +4605,10 @@
             out.alignSelf = node.alignSelf;
         switch (node.kind) {
             case 'stack':
+                if (node.layout)
+                    out.layout = node.layout;
+                if (node.grid)
+                    out.grid = { ...node.grid };
                 out.direction = node.direction;
                 out.children = node.children.map(encodeNode);
                 if (node.gap)
@@ -2183,6 +4633,12 @@
                     out.collapseWhenEmpty = false;
                 break;
             case 'text':
+                if (node.binding)
+                    out.binding = { ...node.binding };
+                if (node.fontId)
+                    out.fontId = node.fontId;
+                if (node.autoHeight === false)
+                    out.autoHeight = false;
                 out.field = node.field;
                 out.fontSize = node.fontSize;
                 out.weight = node.weight;
@@ -2210,6 +4666,8 @@
                     out.hideWhenEmpty = false;
                 break;
             case 'image':
+                if (node.handwriting)
+                    out.handwriting = { ...node.handwriting };
                 out.source = encodeImageSource(node.source);
                 if (node.aspect !== 1)
                     out.aspect = node.aspect;
@@ -2293,7 +4751,9 @@
     }
     /** 档案（`posterTemplates`）与文件共用的形状。 */
     function encodeTemplate(template) {
+        var _a;
         return {
+            ...(((_a = template.fontAssets) === null || _a === void 0 ? void 0 : _a.length) ? { fontAssets: template.fontAssets.map(asset => ({ ...asset })) } : {}),
             canvas: encodeCanvas(template.canvas),
             createdAt: template.createdAt,
             id: template.id,
@@ -2350,22 +4810,38 @@
                 throw new TemplateDocumentError('tooLarge');
         }
     }
+    function checkCanvasDocument(template) {
+        var _a;
+        if (template.root.layout !== 'canvas' || (0, canvas_1.validateCanvasRelations)(template).length)
+            throw new TemplateDocumentError('invalidData');
+        for (const font of (_a = template.fontAssets) !== null && _a !== void 0 ? _a : []) {
+            const bytes = base64Bytes(font.data, 4);
+            const ttf = bytes[0] === 0 && bytes[1] === 1 && bytes[2] === 0 && bytes[3] === 0;
+            const otf = ascii(bytes, 0, 4) === 'OTTO';
+            if (!(font.format === 'ttf' ? ttf : otf))
+                throw new TemplateDocumentError('invalidData');
+            if (base64ByteCount(font.data) > fontCatalog_1.MAX_IMPORTED_FONT_BYTES)
+                throw new TemplateDocumentError('tooLarge');
+        }
+    }
     // MARK: - 写
     /**
      * `template` 必须已经把图放在身上（`{ data }`）；调用方先把存好的资产取出来，
      * 和完整备份的做法一样。返回模版文件的 JSON 文本（落盘前再 gzip 成 `.livemark`）。
      */
     function encodeTemplateDocument(template, env) {
+        var _a;
         const e = (0, model_1.resolveEnvironment)(env);
         const value = (0, model_1.sanitizeTemplate)(template, env);
         checkMedia(collectMedia(value));
+        checkCanvasDocument(value);
         const text = stableStringify({
             app: exports.TEMPLATE_DOCUMENT_APP,
             exportedAt: e.now(),
             template: encodeTemplate(value),
             version: exports.TEMPLATE_DOCUMENT_VERSION,
         });
-        const limit = (0, model_1.templateHasLivePhoto)(value) ? exports.MAX_FILE_BYTES : exports.MAX_BYTES;
+        const limit = (0, model_1.templateHasLivePhoto)(value) || ((_a = value.fontAssets) === null || _a === void 0 ? void 0 : _a.length) ? exports.MAX_FILE_BYTES : exports.MAX_BYTES;
         if (utf8ByteLength(text) > limit)
             throw new TemplateDocumentError('tooLarge');
         return text;
@@ -2385,6 +4861,7 @@
      * 手改过的文件污染不了档案。版本 1 是 v1 的绝对定位模版，明确不兼容。
      */
     function decodeTemplateDocument(text, env) {
+        var _a;
         const e = (0, model_1.resolveEnvironment)(env);
         const bytes = utf8ByteLength(text);
         if (bytes > exports.MAX_FILE_BYTES)
@@ -2419,7 +4896,8 @@
             throw new TemplateDocumentError('invalidData');
         }
         const sanitized = decodeTemplate(rawTemplate, env);
-        if (bytes > ((0, model_1.templateHasLivePhoto)(sanitized) ? exports.MAX_FILE_BYTES : exports.MAX_BYTES)) {
+        checkCanvasDocument(sanitized);
+        if (bytes > ((0, model_1.templateHasLivePhoto)(sanitized) || ((_a = sanitized.fontAssets) === null || _a === void 0 ? void 0 : _a.length) ? exports.MAX_FILE_BYTES : exports.MAX_BYTES)) {
             throw new TemplateDocumentError('tooLarge');
         }
         checkMedia(collectMedia(sanitized));
@@ -2458,769 +4936,221 @@
 
   define("core/template/builtins", function (module, exports, require) {
     "use strict";
-    // 九种内置风格（海报体系 v2）。设计规格见 Documentation/POSTER.md 第 5 节。
-    //
-    // 内置风格就是普通模版，只是由代码写死，所以工坊用同一个编辑器去改它们：
-    // 每一条带子、每一根线、每一张贴纸、每一行字都是树上的一个节点。
-    //
-    // v1 是在 360 × H 的画布上写死每个元素的中心点；v2 改成「同一水平线上的几块写成 row、
-    // 上下相继的写成 column」，字号 / 字重 / 字体 / 颜色 / 不透明度 / 字距 / 行数照搬 v1，
-    // 于是观感照旧，但每一块都是响应式的：一个字段没值，那一块收起，海报自己变短。
-    //
-    // 每种风格的 id 固定，节点 id 也固定（风格前缀 + 前序序号），
-    // 草稿、存下来的副本与出厂排版因此对得上谁是谁。
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.BUILT_IN_TEMPLATE_IDS = exports.SHARE_STYLES = void 0;
     exports.templateIDForStyle = templateIDForStyle;
     exports.styleForTemplateID = styleForTemplateID;
     exports.isBuiltInTemplate = isBuiltInTemplate;
-    exports.col = col;
-    exports.row = row;
-    exports.band = band;
-    exports.text = text;
-    exports.micro = micro;
-    exports.image = image;
-    exports.cover = cover;
-    exports.shape = shape;
-    exports.rule = rule;
-    exports.spacer = spacer;
-    exports.abs = abs;
     exports.builtInTemplate = builtInTemplate;
     exports.builtInTemplates = builtInTemplates;
+    /** Nine editable compositions: independent layers containing actual rows, columns and merged cells. */
     const model_1 = require("./model");
-    // MARK: - 风格与固定标识
-    exports.SHARE_STYLES = [
-        '经典票根',
-        '杂志封面',
-        '电影字幕',
-        '艺术海报',
-        '登机牌',
-        '手帐拼贴',
-        '黑胶唱片',
-        '回忆小票',
-        '极简留白',
-    ];
-    const TEMPLATE_ID_PREFIX = '4C49564D-4152-4B00-8000-0000000000';
-    function templateIDForStyle(style) {
-        const index = exports.SHARE_STYLES.indexOf(style);
-        return TEMPLATE_ID_PREFIX + String(index + 1).padStart(2, '0');
-    }
-    function styleForTemplateID(id) {
-        var _a;
-        const upper = String(id).toUpperCase();
-        return (_a = exports.SHARE_STYLES.find((style) => templateIDForStyle(style) === upper)) !== null && _a !== void 0 ? _a : null;
-    }
+    exports.SHARE_STYLES = ['经典票根', '杂志封面', '电影字幕', '艺术海报', '登机牌', '手帐拼贴', '黑胶唱片', '回忆小票', '极简留白'];
+    const PREFIX = '4C49564D-4152-4B00-8000-0000000000';
+    const EPOCH = '1970-01-01T00:00:00Z';
+    function templateIDForStyle(style) { return PREFIX + String(exports.SHARE_STYLES.indexOf(style) + 1).padStart(2, '0'); }
+    function styleForTemplateID(id) { var _a; return (_a = exports.SHARE_STYLES.find(style => templateIDForStyle(style) === id.toUpperCase())) !== null && _a !== void 0 ? _a : null; }
     exports.BUILT_IN_TEMPLATE_IDS = exports.SHARE_STYLES.map(templateIDForStyle);
-    function isBuiltInTemplate(template) {
-        return exports.BUILT_IN_TEMPLATE_IDS.includes(String(template.id).toUpperCase());
-    }
-    // MARK: - 颜色
-    const PAPER = (0, model_1.colorFromHex)(0xf6f3e9);
-    const INK = (0, model_1.colorFromHex)(0x20251f);
-    const NIGHT = (0, model_1.colorFromHex)(0x141618);
-    const NOTCH = (0, model_1.colorFromHex)(0xe4e0d4);
-    const RECEIPT_PAPER = (0, model_1.colorFromHex)(0xfcfbf6);
-    const JOURNAL_PAPER = (0, model_1.colorFromHex)(0xf2ecdd);
-    const SUBTITLE_GOLD = (0, model_1.colorFromHex)(0xf2d27a);
-    const DISC = (0, model_1.colorFromHex)(0x1b1d1c);
-    const WHITE = model_1.Palette.white;
-    function toPadding(value) {
-        if (value === undefined)
-            return undefined;
-        if (typeof value === 'number')
-            return (0, model_1.padding)(value);
-        if (Array.isArray(value))
-            return (0, model_1.padding)(value[0], value[1]);
-        return value;
-    }
-    function baseOf(options) {
-        return {
-            width: options.width,
-            height: options.height,
-            grow: options.grow,
-            alignSelf: options.alignSelf,
-            opacity: options.opacity,
-            rotation: options.rotation,
-        };
-    }
-    function stack(direction, options, children) {
-        return (0, model_1.makeStackNode)(direction, {
-            ...baseOf(options),
-            gap: options.gap,
-            padding: toPadding(options.padding),
-            align: options.align,
-            justify: options.justify,
-            fill: options.fill,
-            fillAccent: options.fillAccent,
-            cornerRadius: options.radius,
-            stroke: options.stroke,
-            clip: options.clip,
-            collapseWhenEmpty: options.keep ? false : undefined,
-            children: children.slice(),
-        });
-    }
-    function col(options, children) {
-        return stack('column', options, children);
-    }
-    function row(options, children) {
-        return stack('row', options, children);
-    }
-    /** 有底色的 stack：小票的纸、手帐的相纸、票根的色带。 */
-    function band(options, children) {
-        return stack('column', options, children);
-    }
-    function text(field, options = {}) {
-        return (0, model_1.makeTextNode)(field, {
-            ...baseOf(options),
-            fontSize: options.size,
-            weight: options.weight,
-            design: options.design,
-            alignment: options.align,
-            color: options.color,
-            accent: options.accent,
-            tracking: options.tracking,
-            lineLimit: options.lines,
-            label: options.label,
-            text: options.text,
-            uppercase: options.uppercase,
-            chip: options.chip,
-            chipAccent: options.chipAccent,
-            inlineLabel: options.inline,
-            hideWhenEmpty: options.keep ? false : undefined,
-        });
-    }
-    /** 票根上那种小号等宽说明字：“ADMIT ONE”、“NO. 12”。 */
-    function micro(field, options = {}) {
-        return text(field, {
-            size: 8,
-            weight: '半粗',
-            design: '等宽',
-            tracking: 2,
-            lines: 1,
-            uppercase: true,
-            ...options,
-        });
-    }
-    function image(source, options = {}) {
-        return (0, model_1.makeImageNode)(source, {
-            ...baseOf(options),
-            aspect: options.aspect,
-            fit: options.fit,
-            cornerRadius: options.radius,
-            border: options.border,
-            shadow: options.shadow,
-            focusX: options.focusX,
-            focusY: options.focusY,
-            zoom: options.zoom,
-            tilt: options.tilt,
-        });
-    }
-    /** 记录封面。 */
-    function cover(options = {}) {
-        return image('cover', options);
-    }
-    function shape(kind, options = {}) {
-        var _a, _b, _c;
-        return (0, model_1.makeShapeNode)(kind, {
-            ...baseOf(options),
-            height: (_a = options.height) !== null && _a !== void 0 ? _a : options.h,
-            color: options.color,
-            accent: options.accent,
-            cornerRadius: options.radius,
-            strokeWidth: options.stroke,
-            dashLength: (_b = options.dash) === null || _b === void 0 ? void 0 : _b[0],
-            dashGap: (_c = options.dash) === null || _c === void 0 ? void 0 : _c[1],
-        });
-    }
-    /** 一根 1 pt 的线，可虚可实。 */
-    function rule(options = {}) {
-        return shape('直线', { h: 1, stroke: 1, color: INK, ...options });
-    }
-    function spacer() {
-        return (0, model_1.makeSpacerNode)();
-    }
-    /** 绝对定位：贴纸、印章、撕口的缺口圆、压在封面上的字。 */
-    function abs(node, anchor, offset = {}) {
-        var _a, _b;
-        return {
-            ...node,
-            position: 'absolute',
-            anchor,
-            offsetX: (_a = offset.x) !== null && _a !== void 0 ? _a : 0,
-            offsetY: (_b = offset.y) !== null && _b !== void 0 ? _b : 0,
-        };
-    }
-    // MARK: - 组合件
-    /** 票根与登机牌上那条带缺口的虚线撕口：一根虚线 + 压在画布左右边缘的两个圆。 */
-    function perforation(notch = NOTCH, ink = INK) {
-        return col({ height: 22, justify: 'center', keep: true }, [
-            rule({ width: 316, alignSelf: 'center', color: ink, opacity: 0.28, dash: [3, 4] }),
-            abs(shape('圆形', { width: 22, h: 22, color: notch }), 'left', { x: -11 }),
-            abs(shape('圆形', { width: 22, h: 22, color: notch }), 'right', { x: 11 }),
-        ]);
-    }
-    /** 小票的一行：标签在左，值靠右；值没有时整行消失。 */
-    function receiptRow(field, label, weight = '中等') {
-        return text(field, {
-            size: 11,
-            weight,
-            design: '等宽',
-            align: '右对齐',
-            lines: 2,
-            label,
-            inline: true,
-        });
-    }
-    function canvasOf(background, options = {}) {
-        var _a;
-        return {
-            width: 360,
-            height: options.aspect === undefined ? 'hug' : { aspect: options.aspect },
-            padding: (_a = toPadding(options.padding)) !== null && _a !== void 0 ? _a : model_1.ZERO_PADDING,
-            background: { ...background },
-            ...(options.accent ? { backgroundAccent: options.accent } : {}),
-        };
-    }
-    // MARK: - 经典票根
-    // 顶部色带 → 封面 5:6 → 开场白 / 名称 / 副标题 → 两列信息 ×2 → 评分 | 心情 → 撕口 → 标识 | 条码。
-    function ticket() {
-        return {
-            canvas: canvasOf(PAPER),
-            root: col({}, [
-                row({ height: 44, padding: [0, 24], align: 'center', fillAccent: '主题色' }, [
-                    micro('自定义文字', { text: 'ADMIT ONE' }),
-                    micro('编号', { align: '右对齐' }),
-                ]),
-                cover({ aspect: 5 / 6 }),
-                col({ padding: [20, 24], gap: 10 }, [
-                    text('开场白', { size: 10, weight: '半粗', accent: '主题深色', tracking: 2, lines: 1 }),
-                    text('名称', { size: 26, weight: '特粗', tracking: -0.5, lines: 2 }),
-                    text('副标题', { size: 11, lines: 1, opacity: 0.7 }),
-                    row({ gap: 8 }, [
-                        text('日期', { size: 12, weight: '半粗', lines: 1, label: 'DATE' }),
-                        text('城市与场馆', { size: 12, weight: '半粗', lines: 2, label: 'VENUE' }),
-                    ]),
-                    row({ gap: 8 }, [
-                        text('座位', { size: 12, weight: '半粗', lines: 1, label: 'SEAT' }),
-                        text('票价', { size: 12, weight: '半粗', lines: 1, label: 'PRICE' }),
-                    ]),
-                    row({ gap: 8, align: 'center' }, [
-                        text('评分星星', { size: 11, lines: 1 }),
-                        text('心情', { size: 10, weight: '中等', align: '右对齐', lines: 1 }),
-                    ]),
-                ]),
-                perforation(),
-                row({ padding: [14, 24], align: 'center' }, [
-                    text('余响标识', { size: 14, lines: 1 }),
-                    text('条码', { size: 11, lines: 1, width: 88, align: '右对齐' }),
-                ]),
-            ]),
-        };
-    }
-    // MARK: - 杂志封面
-    // 固定比例画布；封面铺满，两条渐变压在上面，字分上下两组由 spacer 撑开。
-    function magazine() {
-        return {
-            canvas: canvasOf(NIGHT, { aspect: 1.72 }),
-            root: col({}, [
-                cover({ height: 'fill' }),
-                abs(shape('渐变', { h: 210, color: model_1.Palette.black, opacity: 0.62 }), 'top'),
-                abs(shape('渐变', { h: 340, color: model_1.Palette.black, opacity: 0.9, rotation: 180 }), 'bottom'),
-                abs(col({ height: 'fill', padding: [30, 22], gap: 10 }, [
-                    col({ gap: 8 }, [
-                        text('余响标识', {
-                            size: 62,
-                            weight: '特粗',
-                            color: WHITE,
-                            tracking: -2,
-                            lines: 1,
-                        }),
-                        shape('矩形', { width: 46, h: 3, accent: '主题色' }),
-                        row({ gap: 8, align: 'center' }, [
-                            micro('英文类型', { color: WHITE }),
-                            micro('编号', { align: '右对齐', color: WHITE }),
-                        ]),
-                    ]),
-                    spacer(),
-                    col({ gap: 8 }, [
-                        text('开场白', { size: 10, weight: '粗体', accent: '主题色', tracking: 2, lines: 1 }),
-                        text('名称', { size: 32, weight: '特粗', color: WHITE, tracking: -1, lines: 3 }),
-                        text('金句', {
-                            size: 13,
-                            weight: '中等',
-                            design: '宋体',
-                            color: WHITE,
-                            lines: 2,
-                            opacity: 0.92,
-                        }),
-                        text('城市与场馆', {
-                            size: 10,
-                            weight: '半粗',
-                            color: WHITE,
-                            tracking: 0.5,
-                            lines: 1,
-                            opacity: 0.85,
-                        }),
-                        row({ gap: 8, align: 'center' }, [
-                            text('日期', {
-                                size: 10,
-                                weight: '半粗',
-                                color: WHITE,
-                                tracking: 0.5,
-                                lines: 1,
-                                opacity: 0.85,
-                            }),
-                            text('评分星星', { size: 10, align: '右对齐', color: WHITE, lines: 1 }),
-                        ]),
-                        row({ gap: 8, align: 'center' }, [
-                            text('余响标识', { size: 14, color: WHITE, lines: 1 }),
-                            text('条码', { size: 10, color: WHITE, lines: 1, width: 72, align: '右对齐' }),
-                        ]),
-                    ]),
-                ]), 'center'),
-            ]),
-        };
-    }
-    // MARK: - 电影字幕
-    // 胶片孔 → 顶行 → 封面 → 金句芯片 → 居中的一叠 → 底行 → 胶片孔。
-    function cinema() {
-        const sprocket = () => shape('胶片孔', { h: 8, width: 328, alignSelf: 'center', color: PAPER, radius: 2, dash: [18, 10], opacity: 0.4 });
-        return {
-            canvas: canvasOf(NIGHT),
-            root: col({}, [
-                col({ padding: [16, 16], gap: 14 }, [
-                    sprocket(),
-                    row({ gap: 8, align: 'center' }, [
-                        micro('自定义文字', { text: 'NOW SHOWING', color: WHITE, opacity: 0.6 }),
-                        micro('时间', { align: '右对齐', color: WHITE, opacity: 0.6 }),
-                    ]),
-                ]),
-                cover({ aspect: 340 / 360 }),
-                col({ padding: [20, 24], gap: 12, align: 'center' }, [
-                    text('金句', {
-                        size: 14,
-                        weight: '中等',
-                        align: '居中',
-                        color: SUBTITLE_GOLD,
-                        lines: 2,
-                        chip: (0, model_1.colorFromHex)(0x000000, 0.55),
-                    }),
-                    text('开场白', {
-                        size: 9,
-                        weight: '中等',
-                        design: '等宽',
-                        align: '居中',
-                        color: WHITE,
-                        tracking: 2,
-                        lines: 1,
-                        opacity: 0.6,
-                    }),
-                    text('名称', { size: 24, weight: '粗体', align: '居中', color: WHITE, lines: 2 }),
-                    text('城市与场馆', {
-                        size: 10,
-                        weight: '中等',
-                        align: '居中',
-                        color: WHITE,
-                        lines: 1,
-                        opacity: 0.65,
-                    }),
-                    text('日期', {
-                        size: 10,
-                        weight: '中等',
-                        align: '居中',
-                        color: WHITE,
-                        lines: 1,
-                        opacity: 0.65,
-                    }),
-                    text('评分星星', { size: 10, align: '居中', color: WHITE, lines: 1 }),
-                    text('感想', { size: 11, align: '居中', color: WHITE, lines: 2, opacity: 0.7 }),
-                ]),
-                col({ padding: [10, 16], gap: 14 }, [
-                    row({ gap: 8, align: 'center' }, [
-                        text('余响标识', { size: 14, color: WHITE, lines: 1 }),
-                        micro('英文类型', { align: '右对齐', color: WHITE }),
-                    ]),
-                    sprocket(),
-                ]),
-            ]),
-        };
-    }
-    // MARK: - 艺术海报
-    // 顶行 → 大标题 → 圆形封面 → 月日 + 年份 | 开场白 + 地点 + 评分 → 金句 → 底行。
-    function poster() {
-        return {
-            canvas: canvasOf(model_1.Palette.lilac, { padding: [24, 24], accent: '主题色' }),
-            root: col({ gap: 16 }, [
-                row({ gap: 8, align: 'center' }, [
-                    micro('余响标识'),
-                    micro('英文类型', { align: '右对齐' }),
-                ]),
-                text('名称', { size: 40, weight: '特粗', tracking: -2, lines: 2 }),
-                cover({ aspect: 1.04, radius: 156 }),
-                row({ gap: 12 }, [
-                    col({ gap: 2 }, [
-                        text('月日', { size: 44, weight: '特粗', tracking: -2, lines: 1 }),
-                        text('年份', { size: 8, weight: '半粗', tracking: 2, lines: 1 }),
-                    ]),
-                    col({ gap: 4 }, [
-                        text('开场白', { size: 11, weight: '粗体', align: '右对齐', tracking: 1, lines: 2 }),
-                        text('城市与场馆', { size: 10, align: '右对齐', lines: 1, opacity: 0.8 }),
-                        text('评分星星', { size: 9, align: '右对齐', lines: 1 }),
-                    ]),
-                ]),
-                text('金句', { size: 13, weight: '中等', design: '宋体', lines: 2 }),
-                row({ gap: 8, align: 'center' }, [
-                    text('余响标识', { size: 14, lines: 1 }),
-                    micro('编号', { align: '右对齐' }),
-                ]),
-            ]),
-        };
-    }
-    // MARK: - 登机牌
-    // 黑色色带 → 封面 2:1 → FROM ✈ TO → 名称 → 三列 ×2 → 票价 | 同行人 → 金句 → 撕口 → 署名 → 标识 | 条码。
-    function boarding() {
-        return {
-            canvas: canvasOf(PAPER),
-            root: col({}, [
-                row({ height: 40, padding: [0, 22], align: 'center', fill: INK }, [
-                    micro('自定义文字', { text: '✈ LIVEMARK AIR · BOARDING PASS', color: PAPER }),
-                    micro('英文类型', { align: '右对齐', color: PAPER, width: 120 }),
-                ]),
-                cover({ aspect: 0.5 }),
-                col({ padding: [18, 22], gap: 14 }, [
-                    row({ gap: 10, align: 'center' }, [
-                        text('自定义文字', {
-                            size: 28,
-                            weight: '特粗',
-                            lines: 1,
-                            label: 'FROM',
-                            text: '日常',
-                            width: 'hug',
-                        }),
-                        col({ gap: 2, align: 'center' }, [
-                            text('自定义文字', { size: 13, align: '居中', lines: 1, opacity: 0.5, text: '✈' }),
-                            rule({ width: 70, alignSelf: 'center', dash: [2, 3], opacity: 0.5 }),
-                        ]),
-                        text('自定义文字', {
-                            size: 28,
-                            weight: '特粗',
-                            align: '右对齐',
-                            lines: 1,
-                            label: 'TO',
-                            text: '现场',
-                            width: 'hug',
-                        }),
-                    ]),
-                    text('名称', { size: 18, weight: '粗体', lines: 2 }),
-                    row({ gap: 10 }, [
-                        text('数字日期', { size: 12, weight: '半粗', design: '黑体', lines: 1, label: 'DATE' }),
-                        text('时间', { size: 12, weight: '半粗', design: '黑体', lines: 1, label: 'BOARDING' }),
-                        text('城市', { size: 12, weight: '半粗', lines: 1, label: 'GATE' }),
-                    ]),
-                    row({ gap: 10 }, [
-                        text('场馆', { size: 12, weight: '半粗', lines: 2, label: 'VENUE' }),
-                        text('座位', { size: 12, weight: '半粗', lines: 1, label: 'SEAT' }),
-                        text('心情', { size: 12, weight: '半粗', lines: 1, label: 'CLASS' }),
-                    ]),
-                    row({ gap: 10 }, [
-                        text('票价', { size: 12, weight: '半粗', lines: 1, label: 'FARE' }),
-                        text('同行人', { size: 12, weight: '半粗', lines: 1, label: 'TRAVELLING WITH', grow: 2 }),
-                    ]),
-                    text('金句', { size: 12, weight: '中等', design: '宋体', lines: 2, opacity: 0.85 }),
-                ]),
-                perforation(),
-                col({ padding: [14, 22], gap: 12 }, [
-                    text('署名', { size: 8, lines: 1, opacity: 0.7, label: 'PASSENGER' }),
-                    row({ gap: 8, align: 'center' }, [
-                        text('余响标识', { size: 11, lines: 1 }),
-                        text('条码', { size: 14, lines: 1, width: 104, align: '右对齐' }),
-                    ]),
-                ]),
-            ]),
-        };
-    }
-    // MARK: - 手帐拼贴
-    // 点阵底（绝对定位铺满，排在第一个所以垫在最底下）→ dear diary | 数字日期 → 相纸（白底微倾）
-    // → 三枚芯片 → 名称 / 感想 / 地点 / 日期 | 评分 / 署名 → 和纸胶带（排在最后，压在最上面）。
-    function journal() {
-        return {
-            // 画布不留内边距：点阵纸纹要铺满整张海报，内边距交给里面那一列。
-            canvas: canvasOf(JOURNAL_PAPER),
-            root: col({}, [
-                // 点阵纸纹排在第一个 = 垫在所有内容底下，高度跟着内容走。
-                abs(shape('点阵', {
-                    height: 'fill',
-                    color: model_1.Palette.black,
-                    stroke: 1.5,
-                    dash: [0, 18],
-                    opacity: 0.07,
-                }), 'center'),
-                col({ padding: [26, 26], gap: 16 }, [
-                    row({ gap: 8, align: 'center' }, [
-                        text('自定义文字', {
-                            size: 22,
-                            weight: '中等',
-                            design: '宋体',
-                            lines: 1,
-                            text: 'dear diary,',
-                        }),
-                        text('数字日期', {
-                            size: 11,
-                            weight: '粗体',
-                            align: '右对齐',
-                            color: model_1.Palette.stamp,
-                            lines: 1,
-                            opacity: 0.85,
-                            rotation: 6,
-                            width: 'hug',
-                        }),
-                    ]),
-                    band({ fill: WHITE, radius: 1, padding: 10, gap: 10, rotation: -2.5 }, [
-                        cover({ aspect: 320 / 286, radius: 2, rotation: -2.5 }),
-                        text('开场白', { size: 12, design: '宋体', align: '居中', lines: 2, rotation: -2.5 }),
-                    ]),
-                    row({ gap: 8 }, [
-                        text('类型', {
-                            size: 10,
-                            weight: '粗体',
-                            align: '居中',
-                            lines: 1,
-                            rotation: -3,
-                            chipAccent: '主题色',
-                        }),
-                        text('心情', {
-                            size: 10,
-                            weight: '粗体',
-                            align: '居中',
-                            lines: 1,
-                            rotation: 2,
-                            chip: model_1.Palette.lime,
-                        }),
-                        text('城市', {
-                            size: 10,
-                            weight: '粗体',
-                            align: '居中',
-                            lines: 1,
-                            rotation: -2,
-                            chip: model_1.Palette.coral,
-                        }),
-                    ]),
-                    text('名称', { size: 22, weight: '粗体', design: '宋体', lines: 2 }),
-                    text('感想', { size: 12, design: '宋体', lines: 3 }),
-                    text('城市与场馆', { size: 9, weight: '中等', design: '等宽', lines: 1, opacity: 0.6 }),
-                    row({ gap: 8, align: 'center' }, [
-                        text('日期', { size: 9, weight: '中等', design: '等宽', lines: 1, opacity: 0.6 }),
-                        text('评分星星', { size: 11, align: '右对齐', color: model_1.Palette.stamp, lines: 1 }),
-                    ]),
-                    row({ gap: 8, align: 'center' }, [
-                        text('余响标识', { size: 14, lines: 1 }),
-                        text('署名', { size: 7, align: '右对齐', lines: 1, opacity: 0.6 }),
-                    ]),
-                ]),
-                // 那片和纸胶带排在最后 = 压在标题那一行上。
-                abs(shape('矩形', { width: 92, h: 24, accent: '主题色', rotation: 6, opacity: 0.85 }), 'top', {
-                    y: 56,
-                }),
-            ]),
-        };
-    }
-    // MARK: - 黑胶唱片
-    // 顶行 → 唱片（封面与黑胶叠在一起）→ 名称 → 曲目单（没有就整块收起，海报变短）→ 金句 → 地点 → 日期 | 评分 → 标识 | 署名。
-    function vinyl() {
-        return {
-            canvas: canvasOf(model_1.Palette.lilac, { padding: [24, 24], accent: '主题色' }),
-            root: col({ gap: 16 }, [
-                row({ gap: 8, align: 'center' }, [
-                    micro('自定义文字', { text: 'SIDE A' }),
-                    micro('自定义文字', { align: '右对齐', text: '33⅓ RPM · STEREO' }),
-                ]),
-                // 全是绝对定位：黑胶在下、封面盖在左边，顺序就是画的顺序。
-                col({ height: 250, keep: true }, [
-                    abs(shape('圆形', { width: 250, h: 250, color: DISC }), 'right', { x: 16 }),
-                    abs(shape('唱片纹', {
-                        width: 218,
-                        h: 218,
-                        color: WHITE,
-                        stroke: 1,
-                        dash: [0, 8],
-                        opacity: 0.09,
-                    }), 'right'),
-                    abs(shape('圆形', { width: 96, h: 96, accent: '主题色' }), 'right', { x: -61 }),
-                    abs(text('自定义文字', { size: 9, weight: '特粗', align: '居中', lines: 1, text: '33⅓', width: 80 }), 'right', { x: -69, y: -18 }),
-                    abs(text('英文类型', {
-                        size: 6,
-                        weight: '粗体',
-                        design: '等宽',
-                        align: '居中',
-                        tracking: 1,
-                        lines: 2,
-                        width: 80,
-                    }), 'right', { x: -69, y: 20 }),
-                    abs(shape('圆形', { width: 9, h: 9, color: DISC }), 'right', { x: -104.5 }),
-                    abs(cover({ aspect: 1, width: { fraction: 0.8 }, shadow: true }), 'left'),
-                ]),
-                text('名称', { size: 26, weight: '特粗', tracking: -0.5, lines: 2 }),
-                text('曲目单', { size: 12, weight: '中等', lines: 5 }),
-                text('金句', { size: 14, weight: '中等', design: '宋体', lines: 2 }),
-                text('城市与场馆', { size: 10, weight: '中等', lines: 1, opacity: 0.7 }),
-                row({ gap: 8, align: 'center' }, [
-                    text('日期', { size: 10, weight: '中等', lines: 1, opacity: 0.7 }),
-                    text('评分星星', { size: 10, align: '右对齐', lines: 1 }),
-                ]),
-                row({ gap: 8, align: 'center' }, [
-                    text('余响标识', { size: 14, lines: 1 }),
-                    text('署名', { size: 7, align: '右对齐', lines: 1, opacity: 0.7 }),
-                ]),
-            ]),
-        };
-    }
-    // MARK: - 回忆小票
-    // 锯齿边的纸里：抬头 → 封面 → 虚线 → 类型 | x 1 → 名称 → 小票行 ×6 → 虚线 → 票价 ×2 → 虚线 → 金句 / 感想 / 条码 / 署名 / 开场白。
-    function receipt() {
-        const serration = (anchor, y) => abs(shape('锯齿边', { h: 18, color: RECEIPT_PAPER, dash: [9, 0] }), anchor, { y });
-        return {
-            canvas: canvasOf(model_1.Palette.lilac, { padding: 18, accent: '主题色' }),
-            root: col({}, [
-                band({ fill: RECEIPT_PAPER, padding: [20, 26], gap: 12, keep: true }, [
-                    text('余响标识', { size: 16, weight: '特粗', design: '等宽', align: '居中', lines: 1 }),
-                    micro('自定义文字', { align: '居中', text: '* MEMORY RECEIPT *' }),
-                    row({ gap: 8, align: 'center' }, [
-                        text('数字日期', { size: 9, design: '等宽', lines: 1, opacity: 0.6 }),
-                        text('时间', { size: 9, design: '等宽', align: '右对齐', lines: 1, opacity: 0.6 }),
-                    ]),
-                    cover({ aspect: 1.2, width: { fraction: 0.55 }, alignSelf: 'center' }),
-                    rule({ opacity: 0.4, dash: [4, 3] }),
-                    row({ gap: 8, align: 'center' }, [
-                        text('类型', { size: 11, weight: '中等', design: '等宽', lines: 1 }),
-                        text('自定义文字', {
-                            size: 11,
-                            weight: '中等',
-                            design: '等宽',
-                            align: '右对齐',
-                            lines: 1,
-                            text: 'x 1',
-                            width: 'hug',
-                        }),
-                    ]),
-                    text('名称', { size: 13, weight: '粗体', design: '等宽', align: '居中', lines: 2 }),
-                    col({ gap: 8 }, [
-                        receiptRow('日期', 'DATE'),
-                        receiptRow('城市与场馆', 'VENUE'),
-                        receiptRow('座位', 'SEAT'),
-                        receiptRow('同行人', 'WITH'),
-                        receiptRow('评分星星', 'RATING'),
-                        receiptRow('心情', 'MOOD'),
-                    ]),
-                    rule({ opacity: 0.4, dash: [4, 3] }),
-                    col({ gap: 8 }, [receiptRow('票价', 'TICKET'), receiptRow('票价', 'TOTAL', '特粗')]),
-                    rule({ opacity: 0.4, dash: [4, 3] }),
-                    text('金句', {
-                        size: 11,
-                        weight: '中等',
-                        design: '等宽',
-                        align: '居中',
-                        lines: 2,
-                        opacity: 0.85,
-                    }),
-                    text('感想', { size: 10, design: '等宽', align: '居中', lines: 3, opacity: 0.7 }),
-                    text('条码', { size: 14, align: '居中', lines: 1, width: 190, alignSelf: 'center' }),
-                    text('署名', { size: 8, design: '等宽', align: '居中', lines: 1, opacity: 0.6 }),
-                    text('开场白', { size: 9, design: '等宽', align: '居中', lines: 1, opacity: 0.6 }),
-                ]),
-                // 纸的上下两排齿：挂在根上（根没有内边距，锚点就是纸的边），
-                // 一半压在纸上（同色、看不见），一半露在外面。
-                serration('top', -9),
-                serration('bottom', 9),
-            ]),
-        };
-    }
-    // MARK: - 极简留白
-    // 顶行 → 线 → 开场白 → 名称 + 副标题 | 小封面 → 线 → 地点 + 日期 | 评分 → 金句 → 感想 → 底行。
-    function minimal() {
-        return {
-            canvas: canvasOf(WHITE, { padding: [28, 28] }),
-            root: col({ gap: 18 }, [
-                row({ gap: 8, align: 'center' }, [micro('余响标识'), micro('编号', { align: '右对齐' })]),
-                rule({}),
-                text('开场白', { size: 11, lines: 1, opacity: 0.6 }),
-                row({ gap: 16 }, [
-                    col({ gap: 10 }, [
-                        text('名称', { size: 32, weight: '常规', design: '宋体', lines: 3 }),
-                        text('副标题', { size: 11, lines: 2, opacity: 0.6 }),
-                    ]),
-                    cover({ width: 96, height: 124, aspect: 124 / 96 }),
-                ]),
-                rule({}),
-                row({ gap: 12 }, [
-                    col({ gap: 6 }, [
-                        text('城市与场馆', { size: 10, weight: '中等', design: '等宽', lines: 2, opacity: 0.75 }),
-                        text('日期', { size: 10, weight: '中等', design: '等宽', lines: 1, opacity: 0.75 }),
-                    ]),
-                    text('评分星星', { size: 9, align: '右对齐', lines: 1, width: 100 }),
-                ]),
-                text('金句', { size: 15, design: '宋体', lines: 3 }),
-                text('感想', { size: 12, lines: 4, opacity: 0.7 }),
-                row({ gap: 8, align: 'center' }, [
-                    text('余响标识', { size: 14, lines: 1 }),
-                    text('英文类型', {
-                        size: 9,
-                        weight: '中等',
-                        design: '等宽',
-                        align: '右对齐',
-                        tracking: 3,
-                        lines: 1,
-                        opacity: 0.6,
-                    }),
-                ]),
-            ]),
-        };
-    }
-    // MARK: - 出厂
-    const BUILDERS = {
-        经典票根: ticket,
-        杂志封面: magazine,
-        电影字幕: cinema,
-        艺术海报: poster,
-        登机牌: boarding,
-        手帐拼贴: journal,
-        黑胶唱片: vinyl,
-        回忆小票: receipt,
-        极简留白: minimal,
-    };
-    const EPOCH = (0, model_1.isoString)(new Date(0));
-    const fixedEnvironment = { newID: () => '00000000-0000-0000-0000-000000000000', now: () => EPOCH };
-    /** 节点 id：风格前缀 + 前序序号，每次生成都一样。 */
-    function withFixedIDs(node, prefix, counter) {
-        counter.n += 1;
-        const id = prefix + String(counter.n).padStart(12, '0');
-        if (!(0, model_1.isStackNode)(node))
-            return { ...node, id };
-        return {
-            ...node,
-            id,
-            children: node.children.map((child) => withFixedIDs(child, prefix, counter)),
-        };
-    }
-    /**
-     * 这种风格出厂时的排版。每次调用结果都一样，所以工坊不缓存，
-     * 生成一份不过是几次值拷贝。出来的就是清洗过的规范形。
-     */
+    function isBuiltInTemplate(template) { return exports.BUILT_IN_TEMPLATE_IDS.includes(template.id.toUpperCase()); }
     function builtInTemplate(style) {
-        const built = BUILDERS[style]();
-        const id = templateIDForStyle(style);
-        // 第四组编上风格序号，九种风格的节点 id 因此互不相同，也不会撞上模版自己的 id。
-        const prefix = '4C49564D-4152-4B00-800' + String(exports.SHARE_STYLES.indexOf(style) + 1) + '-';
-        const root = withFixedIDs(built.root, prefix, { n: 0 });
-        return (0, model_1.sanitizeTemplate)({ id, name: style, canvas: built.canvas, root, createdAt: EPOCH, updatedAt: EPOCH }, fixedEnvironment);
+        let serial = 0;
+        const env = { now: () => EPOCH, newID: () => '4C49564D-4152-4B00-800' + (exports.SHARE_STYLES.indexOf(style) + 1) + '-' + String(++serial).padStart(12, '0') };
+        const root = (0, model_1.makeStackNode)('column', { layout: 'canvas' }, env);
+        const nodes = [];
+        let canvas = (0, model_1.defaultCanvas)();
+        const dark = style === '电影字幕' || style === '黑胶唱片';
+        const ink = dark ? model_1.Palette.cream : model_1.Palette.ink;
+        const push = (node) => { nodes.push(node); return node; };
+        const text = (field, frame, options = {}) => push((0, model_1.makeTextNode)(field, { frame, color: ink, ...options }, env));
+        const cover = (frame, options = {}) => push((0, model_1.makeImageNode)('cover', { frame, ...options }, env));
+        const region = (frame, options = {}) => push((0, model_1.makeStackNode)('column', { layout: 'region', frame, padding: (0, model_1.padding)(0), children: [], ...options }, env));
+        const shape = (kind, frame, color, options = {}) => push((0, model_1.makeShapeNode)(kind, { frame, color, ...options }, env));
+        const after = (target, gap = 12) => ({ targetId: target.id, gap });
+        const info = (owner, fields, size = 12, options = {}) => {
+            var _a, _b, _c, _d, _e, _f;
+            let previous;
+            const inset = (_b = (_a = owner.padding) === null || _a === void 0 ? void 0 : _a.left) !== null && _b !== void 0 ? _b : 0;
+            for (const field of fields) {
+                previous = text(field, { x: inset, y: (_d = (_c = owner.padding) === null || _c === void 0 ? void 0 : _c.top) !== null && _d !== void 0 ? _d : 0, width: owner.frame.width - inset - ((_f = (_e = owner.padding) === null || _e === void 0 ? void 0 : _e.right) !== null && _f !== void 0 ? _f : 0), height: size * 1.4 }, {
+                    regionId: owner.id, fontSize: size, ...(previous ? { follow: after(previous, 8) } : {}), ...options,
+                });
+            }
+            return previous;
+        };
+        const memories = (target, width = 312, options = {}) => {
+            const block = region({ x: 0, y: 0, width, height: 0 }, { follow: after(target, 20), ...options });
+            info(block, ['金句', '感想', '曲目单'], 13, { design: style === '回忆小票' ? '等宽' : '宋体' });
+            return block;
+        };
+        const signature = (target, options = {}) => text('署名', { x: 0, y: 0, width: 312, height: 16 }, { fontSize: 9, follow: after(target, 20), opacity: 0.65, ...options });
+        switch (style) {
+            case '经典票根': {
+                const image = cover({ x: 0, y: 0, width: 312, height: 242 }, { cornerRadius: 10 });
+                const body = region({ x: 0, y: 0, width: 312, height: 0 }, { follow: after(image, 0), fill: model_1.Palette.white, padding: (0, model_1.padding)(20), cornerRadius: 10 });
+                const title = text('名称', { x: 20, y: 20, width: 272, height: 44 }, { regionId: body.id, fontSize: 28, weight: '粗体' });
+                const performer = text('艺人 / 卡司', { x: 20, y: 20, width: 272, height: 20 }, { regionId: body.id, fontSize: 12, follow: after(title, 8) });
+                const date = text('日期', { x: 20, y: 20, width: 272, height: 20 }, { regionId: body.id, fontSize: 12, label: 'DATE', follow: after(performer, 20) });
+                text('城市与场馆', { x: 20, y: 20, width: 272, height: 22 }, { regionId: body.id, fontSize: 12, label: 'VENUE', follow: after(date, 12) });
+                const line = shape('直线', { x: 0, y: 0, width: 312, height: 1 }, model_1.Palette.ink, { follow: after(body, 14), dashLength: 4, dashGap: 4, opacity: 0.4 });
+                const notes = memories(line);
+                const stamp = text('条码', { x: 0, y: 0, width: 160, height: 22 }, { fontSize: 10, follow: after(notes, 18) });
+                signature(stamp);
+                break;
+            }
+            case '杂志封面': {
+                canvas = { ...canvas, height: { aspect: 1.72 }, padding: model_1.ZERO_PADDING, background: model_1.Palette.night };
+                cover({ x: 0, y: 0, width: 360, height: 619 }, { decoration: true });
+                shape('渐变', { x: 0, y: 290, width: 360, height: 330 }, model_1.Palette.black, { decoration: true, opacity: 0.65 });
+                text('余响标识', { x: 24, y: 26, width: 312, height: 32 }, { fontSize: 26, color: model_1.Palette.white, tracking: 6 });
+                text('英文类型', { x: 24, y: 78, width: 312, height: 15 }, { fontSize: 10, color: model_1.Palette.white, tracking: 3 });
+                const body = region({ x: 24, y: 340, width: 312, height: 0 });
+                const title = text('名称', { x: 0, y: 0, width: 312, height: 64 }, { regionId: body.id, fontSize: 36, weight: '特粗', color: model_1.Palette.white });
+                const who = text('艺人 / 卡司', { x: 0, y: 0, width: 312, height: 24 }, { regionId: body.id, fontSize: 14, color: model_1.Palette.white, follow: after(title, 12) });
+                const date = text('日期', { x: 0, y: 0, width: 312, height: 18 }, { regionId: body.id, fontSize: 11, color: model_1.Palette.white, follow: after(who, 16) });
+                text('城市与场馆', { x: 0, y: 0, width: 312, height: 18 }, { regionId: body.id, fontSize: 11, color: model_1.Palette.white, follow: after(date, 5) });
+                break;
+            }
+            case '电影字幕': {
+                canvas = { ...canvas, padding: model_1.ZERO_PADDING, background: model_1.Palette.night };
+                const image = cover({ x: 0, y: 0, width: 360, height: 224 });
+                const body = region({ x: 30, y: 0, width: 300, height: 0 }, { follow: after(image, 24) });
+                const title = text('名称', { x: 0, y: 0, width: 300, height: 38 }, { regionId: body.id, fontSize: 25, weight: '半粗', alignment: '居中' });
+                const quote = text('金句', { x: 0, y: 0, width: 300, height: 24 }, { regionId: body.id, fontSize: 16, color: (0, model_1.colorFromHex)(0xf2d27a), design: '宋体', alignment: '居中', follow: after(title, 24) });
+                const date = text('日期', { x: 0, y: 0, width: 300, height: 18 }, { regionId: body.id, fontSize: 10, alignment: '居中', opacity: 0.7, follow: after(quote, 22) });
+                text('城市与场馆', { x: 0, y: 0, width: 300, height: 18 }, { regionId: body.id, fontSize: 10, alignment: '居中', opacity: 0.7, follow: after(date, 6) });
+                const notes = region({ x: 30, y: 0, width: 300, height: 0 }, { follow: after(body, 20) });
+                info(notes, ['感想'], 12, { alignment: '居中' });
+                signature(notes, { frame: { x: 30, y: 0, width: 300, height: 36 }, alignment: '居中' });
+                break;
+            }
+            case '艺术海报': {
+                canvas = { ...canvas, background: model_1.Palette.lilac };
+                text('英文类型', { x: 0, y: 0, width: 312, height: 20 }, { fontSize: 10, tracking: 5 });
+                const title = text('名称', { x: 0, y: 36, width: 312, height: 70 }, { fontSize: 44, weight: '特粗', tracking: -1 });
+                const image = cover({ x: 34, y: 0, width: 278, height: 330 }, { follow: after(title, 20), cornerRadius: 140 });
+                const body = region({ x: 0, y: 0, width: 312, height: 0 }, { follow: after(image, 24) });
+                info(body, ['艺人 / 卡司', '日期', '城市与场馆'], 12);
+                const notes = memories(body);
+                signature(notes);
+                break;
+            }
+            case '登机牌': {
+                canvas = { ...canvas, background: (0, model_1.colorFromHex)(0xe5edf1) };
+                const header = text('英文类型', { x: 0, y: 0, width: 312, height: 20 }, { fontSize: 11, tracking: 4, color: (0, model_1.colorFromHex)(0x274455) });
+                const title = text('名称', { x: 0, y: 0, width: 312, height: 50 }, { fontSize: 32, weight: '粗体', follow: after(header, 18) });
+                const body = region({ x: 0, y: 0, width: 312, height: 156 }, { follow: after(title, 18), fill: model_1.Palette.white, padding: (0, model_1.padding)(16), cornerRadius: 8 });
+                cover({ x: 16, y: 16, width: 100, height: 124 }, { regionId: body.id, cornerRadius: 3 });
+                let previous;
+                for (const field of ['日期', '城市与场馆', '座位', '票价'])
+                    previous = text(field, { x: 132, y: 16, width: 164, height: 18 }, { regionId: body.id, fontSize: 11, label: field === '日期' ? 'DEPARTURE' : '', ...(previous ? { follow: after(previous, 10) } : {}) });
+                const notes = memories(body);
+                const barcode = text('条码', { x: 0, y: 0, width: 312, height: 28 }, { fontSize: 13, follow: after(notes, 22) });
+                signature(barcode);
+                break;
+            }
+            case '手帐拼贴': {
+                canvas = { ...canvas, background: (0, model_1.colorFromHex)(0xf2ecdd) };
+                shape('点阵', { x: 0, y: 0, width: 312, height: 760 }, (0, model_1.colorFromHex)(0xc4b79d), { decoration: true, opacity: 0.35 });
+                const photo = region({ x: 8, y: 14, width: 296, height: 0 }, { fill: model_1.Palette.white, padding: (0, model_1.padding)(14), rotation: -3, collapseWhenEmpty: false });
+                const image = cover({ x: 14, y: 14, width: 268, height: 270 }, { regionId: photo.id });
+                text('名称', { x: 14, y: 14, width: 268, height: 36 }, { regionId: photo.id, fontSize: 22, design: '宋体', alignment: '居中', follow: after(image, 15) });
+                shape('矩形', { x: 104, y: 2, width: 92, height: 24 }, model_1.Palette.gold, { regionId: photo.id, decoration: true, rotation: 4, opacity: 0.7 });
+                const detail = region({ x: 0, y: 0, width: 312, height: 0 }, { follow: after(photo, 28) });
+                info(detail, ['日期', '城市与场馆', '心情'], 11);
+                const notes = memories(detail);
+                signature(notes);
+                break;
+            }
+            case '黑胶唱片': {
+                canvas = { ...canvas, background: model_1.Palette.night };
+                const hero = region({ x: 0, y: 0, width: 312, height: 282 }, { collapseWhenEmpty: false });
+                shape('唱片纹', { x: 16, y: 0, width: 280, height: 280 }, (0, model_1.colorFromHex)(0x494b46), { regionId: hero.id, decoration: true });
+                cover({ x: 78, y: 62, width: 156, height: 156 }, { regionId: hero.id, cornerRadius: 78 });
+                const title = text('名称', { x: 0, y: 0, width: 312, height: 48 }, { fontSize: 29, weight: '半粗', alignment: '居中', follow: after(hero, 24) });
+                const who = text('艺人 / 卡司', { x: 0, y: 0, width: 312, height: 20 }, { fontSize: 12, alignment: '居中', follow: after(title, 10), opacity: 0.75 });
+                const details = region({ x: 0, y: 0, width: 312, height: 0 }, { follow: after(who, 20) });
+                info(details, ['日期', '城市与场馆'], 11, { alignment: '居中' });
+                const notes = memories(details);
+                signature(notes);
+                break;
+            }
+            case '回忆小票': {
+                canvas = { ...canvas, padding: (0, model_1.padding)(28, 40), background: (0, model_1.colorFromHex)(0xfcfbf6) };
+                const title = text('名称', { x: 0, y: 0, width: 280, height: 42 }, { fontSize: 25, design: '等宽', alignment: '居中', weight: '粗体' });
+                const image = cover({ x: 0, y: 0, width: 280, height: 180 }, { follow: after(title, 20), cornerRadius: 2 });
+                const details = region({ x: 0, y: 0, width: 280, height: 0 }, { follow: after(image, 22) });
+                let previous;
+                for (const field of ['日期', '时间', '城市与场馆', '票价', '座位', '同行人'])
+                    previous = text(field, { x: 0, y: 0, width: 280, height: 18 }, { regionId: details.id, fontSize: 11, design: '等宽', label: field, ...(previous ? { follow: after(previous, 12) } : {}) });
+                const line = shape('直线', { x: 0, y: 0, width: 280, height: 1 }, model_1.Palette.ink, { follow: after(details, 20), dashLength: 3, dashGap: 3 });
+                const notes = memories(line, 280);
+                const barcode = text('条码', { x: 0, y: 0, width: 280, height: 28 }, { fontSize: 13, follow: after(notes, 22) });
+                signature(barcode, { frame: { x: 0, y: 0, width: 280, height: 16 }, alignment: '居中' });
+                break;
+            }
+            case '极简留白': {
+                canvas = { ...canvas, background: model_1.Palette.white };
+                const header = region({ x: 0, y: 24, width: 312, height: 140 });
+                cover({ x: 0, y: 0, width: 96, height: 124 }, { regionId: header.id });
+                const title = text('名称', { x: 120, y: 8, width: 192, height: 60 }, { regionId: header.id, fontSize: 26, weight: '半粗' });
+                text('艺人 / 卡司', { x: 120, y: 8, width: 192, height: 20 }, { regionId: header.id, fontSize: 11, follow: after(title, 12), opacity: 0.65 });
+                const detail = region({ x: 0, y: 0, width: 312, height: 0 }, { follow: after(header, 40) });
+                info(detail, ['日期', '城市与场馆'], 11);
+                const notes = memories(detail, 312, { follow: after(detail, 32) });
+                signature(notes);
+                break;
+            }
+        }
+        // Keep drawing order and identities stable while giving each content layer its own editable grid.
+        const replacements = new Map();
+        for (const owner of nodes.filter((node) => node.kind === 'stack')) {
+            const members = nodes.filter(node => node.regionId === owner.id && !node.decoration);
+            const first = members[0], labels = members.filter((node) => node.kind === 'text').map(node => node.field);
+            let grid = { columns: 1, rows: Math.max(1, members.length), columnGap: 12, rowGap: 12 };
+            const cells = members.map((node, row) => ({ id: node.id, row, column: 0 }));
+            if (style === '登机牌' && (first === null || first === void 0 ? void 0 : first.kind) === 'image') {
+                grid = { columns: 2, rows: 4, columnWeights: [100, 164], columnGap: 16, rowGap: 10, merges: [{ row: 0, column: 0, rowSpan: 4 }] };
+                cells.forEach((cell, i) => { cell.row = Math.max(0, i - 1); cell.column = i ? 1 : 0; });
+            }
+            else if (style === '极简留白' && (first === null || first === void 0 ? void 0 : first.kind) === 'image') {
+                grid = { columns: 2, rows: 2, columnWeights: [96, 192], columnGap: 24, rowGap: 12, merges: [{ row: 0, column: 0, rowSpan: 2 }] };
+                cells.forEach((cell, i) => { cell.row = Math.max(0, i - 1); cell.column = i ? 1 : 0; });
+            }
+            else if (style === '黑胶唱片' && (first === null || first === void 0 ? void 0 : first.kind) === 'image') {
+                grid = { columns: 4, rows: 1, columnGap: 0, rowGap: 0, rowHeights: [280], merges: [{ row: 0, column: 1, colSpan: 2 }] };
+                cells[0].column = 1;
+            }
+            else if (style === '手帐拼贴' && (first === null || first === void 0 ? void 0 : first.kind) === 'image')
+                grid = { ...grid, rowGap: 15 };
+            const name = (first === null || first === void 0 ? void 0 : first.kind) === 'image' ? '封面组合' : labels.includes('感想') || labels.includes('金句') ? '感想与回忆' : labels.includes('名称') ? '标题与信息' : '记录信息';
+            replacements.set(owner.id, { ...owner, name, layout: 'grid', grid });
+            for (const cell of cells) {
+                const node = members.find(item => item.id === cell.id);
+                replacements.set(node.id, { ...node, follow: undefined, cell: { row: cell.row, column: cell.column },
+                    ...(style === '黑胶唱片' && node.kind === 'image' ? { alignSelf: 'center' } : {}) });
+            }
+        }
+        return (0, model_1.sanitizeTemplate)({ id: templateIDForStyle(style), name: style, canvas, root: { ...root, children: nodes.map(node => { var _a; return (_a = replacements.get(node.id)) !== null && _a !== void 0 ? _a : node; }) }, createdAt: EPOCH, updatedAt: EPOCH }, env);
     }
-    function builtInTemplates() {
-        return exports.SHARE_STYLES.map(builtInTemplate);
-    }
+    function builtInTemplates() { return exports.SHARE_STYLES.map(builtInTemplate); }
 
   });
 
   define("share/scene", function (module, exports, require) {
     "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.typeDisplayName = typeDisplayName;
+    exports.posterRecord = posterRecord;
+    exports.posterOptions = posterOptions;
+    exports.makeCardContext = makeCardContext;
+    exports.resolveColor = resolveColor;
+    exports.resolveValues = resolveValues;
+    exports.buildScene = buildScene;
+    exports.measurePoster = measurePoster;
+    exports.posterPixelSize = posterPixelSize;
+    exports.sceneImageSources = sceneImageSources;
+    const uuid_1 = require("@/core/uuid");
+    const customFields_1 = require("@/core/customFields");
     // 海报的「场景」：一份模版 + 一条记录 → 一串按绘制顺序排好的图元。
     // 设计规格见 Documentation/POSTER.md 第 3、4 节。
     //
@@ -3235,17 +5165,6 @@
     //
     // 坐标：画布永远 360 pt 宽，高由内容决定（`layout.height`）；图元的 frame 是
     // **左上角 + 宽高**，`rotation` 绕 frame 中心转（祖先的旋转已经乘进来了）。
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.typeDisplayName = typeDisplayName;
-    exports.posterRecord = posterRecord;
-    exports.posterOptions = posterOptions;
-    exports.makeCardContext = makeCardContext;
-    exports.resolveColor = resolveColor;
-    exports.resolveValues = resolveValues;
-    exports.buildScene = buildScene;
-    exports.measurePoster = measurePoster;
-    exports.posterPixelSize = posterPixelSize;
-    exports.sceneImageSources = sceneImageSources;
     const labels_1 = require("@/core/labels");
     const models_1 = require("@/core/models");
     const layout_1 = require("@/core/template/layout");
@@ -3262,11 +5181,22 @@
             uri: typeof value.filePath === 'string' ? value.filePath : undefined,
         };
     }
+    const inlineImageIdentities = new Map();
+    function inlineImageKey(owner, data) {
+        const previous = inlineImageIdentities.get(owner);
+        if ((previous === null || previous === void 0 ? void 0 : previous.data) === data)
+            return previous.key;
+        const key = `${owner}-${(0, uuid_1.derivedUUID)(data)}`;
+        inlineImageIdentities.set(owner, { data, key });
+        if (inlineImageIdentities.size > 32)
+            inlineImageIdentities.delete(inlineImageIdentities.keys().next().value);
+        return key;
+    }
     function nodeImageSource(node, context) {
         if (node.source === 'cover')
             return context.cover.source;
         if ('data' in node.source && node.source.data) {
-            return { key: `element-${node.id}`, data: node.source.data };
+            return { key: inlineImageKey(`element-${node.id}`, node.source.data), data: node.source.data };
         }
         if ('asset' in node.source)
             return assetSource(node.source.asset);
@@ -3276,7 +5206,7 @@
         if (!image)
             return null;
         if (image.data)
-            return { key: `template-${template.id}`, data: image.data };
+            return { key: inlineImageKey(`template-${template.id}`, image.data), data: image.data };
         return assetSource(image.asset);
     }
     // MARK: - 记录 → 卡片内容
@@ -3350,10 +5280,12 @@
         return null;
     }
     /** 把一条记录、一组开关和一个署名合成卡片要印的全部内容。 */
-    function makeCardContext(record, options, author, types) {
+    function makeCardContext(record, options, author, types, definitions) {
         const type = types ? (0, models_1.catalogResolve)(types, record) : undefined;
         return {
             bits: (0, model_1.makeCardBits)(posterRecord(record, type), posterOptions(options), author),
+            customFields: Object.fromEntries((0, customFields_1.customFieldsForRecord)(record, types, definitions)
+                .map(field => [field.id, field.isPrivate && !options.showCustomPrivate ? null : field.value.trim() || null])),
             accent: accentColor(options.accent),
             deep: accentDeepColor(options.accent),
             cover: { source: coverSource(record), artwork: record.artwork, title: record.title },
@@ -3376,12 +5308,19 @@
     function resolveValues(template, context, placeholders = false) {
         const values = {};
         (0, model_1.walkNodes)(template.root, (node) => {
+            var _a, _b;
             if (!(0, model_1.isTextNode)(node))
                 return;
-            const value = (0, model_1.templateText)(node, context.bits);
-            values[node.id] = value === null && placeholders ? '[' + (0, i18n_1.t)(node.field) + ']' : value;
+            const value = resolvedText(node, context);
+            values[node.id] = value === null && placeholders ? '[' + ((_b = (_a = node.binding) === null || _a === void 0 ? void 0 : _a.name) !== null && _b !== void 0 ? _b : (0, i18n_1.t)(node.field)) + ']' : value;
         });
         return values;
+    }
+    function resolvedText(node, context) {
+        var _a, _b, _c;
+        if (((_a = node.binding) === null || _a === void 0 ? void 0 : _a.kind) === 'custom')
+            return (_c = (_b = context.customFields) === null || _b === void 0 ? void 0 : _b[node.binding.definitionId]) !== null && _c !== void 0 ? _c : null;
+        return (0, model_1.templateText)(node, context.bits);
     }
     const IDENTITY = { a: 1, b: 0, tx: 0, ty: 0, angle: 0 };
     function applyPoint(t, x, y) {
@@ -3410,7 +5349,7 @@
         var _a;
         const placeholders = options.placeholders === true;
         const values = resolveValues(template, context, placeholders);
-        const layout = (0, layout_1.layoutTemplate)(template, values, measure_1.skiaMeasure);
+        const layout = (0, layout_1.layoutTemplate)(template, values, measure_1.skiaMeasure, { editingGridId: options.editingGridId });
         const pass = (_a = options.pass) !== null && _a !== void 0 ? _a : null;
         const emitted = emitItems(layout, context, values, placeholders);
         let items = emitted.items;
@@ -3492,12 +5431,14 @@
         };
     }
     function emitItems(layout, context, values, placeholders) {
-        var _a, _b;
+        var _a, _b, _c;
         const items = [];
         const clips = [];
         const openers = new Map();
         const transforms = new Map();
         const open = [];
+        const root = (_a = layout.nodes[0]) === null || _a === void 0 ? void 0 : _a.node;
+        const canvasMode = (root === null || root === void 0 ? void 0 : root.kind) === 'stack' && root.layout === 'canvas';
         const push = (item) => {
             items.push(item);
             clips.push(open.map((entry) => entry.id));
@@ -3507,7 +5448,7 @@
                 const closed = open.pop();
                 push({ ...openers.get(closed.id), kind: 'clipEnd' });
             }
-            const parent = laid.parent ? ((_a = transforms.get(laid.parent)) !== null && _a !== void 0 ? _a : IDENTITY) : IDENTITY;
+            const parent = laid.parent ? ((_b = transforms.get(laid.parent)) !== null && _b !== void 0 ? _b : IDENTITY) : IDENTITY;
             const cx = laid.frame.x + laid.frame.width / 2;
             const cy = laid.frame.y + laid.frame.height / 2;
             transforms.set(laid.id, compose(parent, laid.rotation, cx, cy));
@@ -3531,7 +5472,7 @@
                     const opener = {
                         ...base,
                         kind: 'clipBegin',
-                        cornerRadius: (_b = node.cornerRadius) !== null && _b !== void 0 ? _b : 0,
+                        cornerRadius: (_c = node.cornerRadius) !== null && _c !== void 0 ? _c : 0,
                     };
                     openers.set(laid.id, opener);
                     push(opener);
@@ -3539,7 +5480,7 @@
                 }
                 continue;
             }
-            push(nodeItem(node, base, context, values, placeholders));
+            push(nodeItem(node, base, context, values, placeholders, canvasMode));
         }
         while (open.length > 0) {
             const closed = open.pop();
@@ -3567,7 +5508,7 @@
                 : null,
         };
     }
-    function nodeItem(node, base, context, values, placeholders) {
+    function nodeItem(node, base, context, values, placeholders, canvasMode) {
         var _a, _b, _c, _d, _e, _f, _g;
         if ((0, model_1.isImageNode)(node)) {
             return {
@@ -3613,17 +5554,20 @@
                 field: node.field,
                 value: resolved !== null && resolved !== void 0 ? resolved : '',
                 // 占位模式下的值是 `[字段名]`，画笔把它印淡一点再套一圈虚线框。
-                placeholder: placeholders && (0, model_1.templateText)(node, context.bits) === null,
+                placeholder: placeholders && resolvedText(node, context) === null,
                 content: node.field === '条码' ? 'barcode' : 'text',
                 barcodeSeed: String(context.bits.record.id).toUpperCase(),
                 label: node.label,
                 inlineLabel: node.inlineLabel === true && node.label.length > 0,
                 fontSize: node.fontSize,
+                fontId: node.fontId,
                 weight: node.weight,
                 design: node.design,
                 align: node.alignment,
                 tracking: node.tracking,
-                lineLimit: node.lineLimit,
+                // v3 measures the full value, including grid members that have no free-object frame.
+                // Fixed-height overflow is explicit; it must not silently become an ellipsis here.
+                lineLimit: canvasMode || node.frame && node.autoHeight !== false ? 10000 : node.lineLimit,
                 color: resolveColor(node.color, node.accent, context),
                 chip,
             };
@@ -3690,38 +5634,6 @@
 
   });
 
-  define("shims/models", function (module, exports, require) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.accentHex = accentHex;
-    exports.accentDeepHex = accentDeepHex;
-    exports.catalogResolve = catalogResolve;
-    const HEX = {
-        鸢尾紫: '#bba7ef',
-        苔藓绿: '#d8eb97',
-        珊瑚橘: '#f4ab8e',
-        远山蓝: '#adcfe5',
-    };
-    const DEEP = {
-        鸢尾紫: '#6e58a8',
-        苔藓绿: '#5e7a32',
-        珊瑚橘: '#c2603a',
-        远山蓝: '#3e6e8e',
-    };
-    function accentHex(accent) {
-        var _a;
-        return (_a = HEX[accent]) !== null && _a !== void 0 ? _a : HEX['鸢尾紫'];
-    }
-    function accentDeepHex(accent) {
-        var _a;
-        return (_a = DEEP[accent]) !== null && _a !== void 0 ? _a : DEEP['鸢尾紫'];
-    }
-    function catalogResolve(_catalog, _record) {
-        return undefined;
-    }
-
-  });
-
   define("shims/i18n", function (module, exports, require) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -3753,7 +5665,7 @@
 
   var require = requireFrom('');
   var core = {};
-  ["core/template/model","core/template/layout","core/template/document","core/template/builtins","share/scene"].forEach(function (id) {
+  ["core/models","core/customFields","core/template/fontCatalog","core/template/canvas","core/template/model","core/template/layout","core/template/document","core/template/builtins","share/scene"].forEach(function (id) {
     var exported = require(id);
     Object.keys(exported).forEach(function (key) {
       if (key !== '__esModule' && key !== 'default') core[key] = exported[key];

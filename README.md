@@ -1,69 +1,56 @@
-# Livemark 模版工坊（浏览器版）
+# Livemark 海报工坊 · 画布版
 
-在电脑上排 Livemark 的海报模版，导出 `.livemark` 隔空投送到手机，点开即在 App 里打开。
+网页和 App 共用 schema 3 模板、字段解析、网格布局、编辑命令和字体身份。PNG 导出统一使用固定版本的 CanvasKit CPU/WASM 引擎，复用同一份测量、绘制、字体字节与图片解码；记录内容不会发送到渲染服务。共有内容按像素一致验收，iOS 专属字体或素材不要求跨端复制。
 
-## 打开
+## 本地运行
 
-线上版：<https://kinyokun.github.io/livemark-template-editor/>。这几个文件同时躺在 App 仓库的 `Web/template-editor/` 和公开仓库 `kinyokun/livemark-template-editor`，后者由前者的 `scripts/publish_web_editor.sh` 镜像过来，别直接改公开仓库。
-
-本地：直接双击 `index.html`，或者拖进浏览器。没有构建步骤，没有依赖，`file://` 与 `http://` 都能跑。
+在 App 仓库根目录运行：
 
 ```sh
-# 想用本地服务器也行，在这个文件夹里跑
-python3 -m http.server 8731
+node scripts/build_web_editor.js
+python3 -m http.server 8874 --bind 127.0.0.1 --directory Web/template-editor
 ```
 
-支持 Chrome / Edge / Safari 16.4 以上（`.livemark` 是 gzip 的，要 `CompressionStream`）。
+打开 `http://127.0.0.1:8874`。构建脚本生成 `core.js`、`offline/` 导出引擎和 App 的内联引擎页面，并复制完整字库和 OFL 授权到 `fonts/`。生成文件应通过构建更新。使用 HTTP 本地服务，避免 `file://` 下字体加载、IndexedDB 和 Web Crypto 的浏览器限制。
 
-## 和 App 是同一份代码
+首次导出会读取本站静态引擎和所需字体，随后在设备内计算。App 将完整引擎和字体打包到本地，不依赖网络。两端都不会回退到系统字体或另一套绘制实现来冒充一致导出；缺少资源会明确失败。
 
-页面里的 `core.js` **是 App 的 TypeScript 编译出来的**，不是照着重写的一份：
+`scripts/publish_web_editor.sh` 会先构建再镜像到独立公开仓库；本次实现不自动发布。
 
-- 模型与清洗（`sanitizeTemplate`、各种取值范围）—— `src/core/template/model.ts`
-- 排版引擎（hug / fill / fraction、padding、gap、对齐、绝对定位、收起）—— `src/core/template/layout.ts`
-- 文件格式（`.livemark` 版本 2 的编解码）—— `src/core/template/document.ts`
-- 九个内置风格与四种起点 —— `src/core/template/builtins.ts`
-- 场景（模版 + 记录 → 一串按绘制顺序排好的图元）—— `src/features/share/scene.ts`
+## 编辑
 
-在 App 仓库里跑 `node scripts/build_web_editor.js` 重新生成。改了 App 的海报代码就重跑一次，网页这边不用动。
+- 点选元素，单指或鼠标拖动移动；四角缩放，上方圆点旋转。文字左右控制点只改宽度，让正文重新换行。
+- 图片默认移动外框。点“裁剪图片”后，拖动才会调整框内内容；完成后回到移动模式。
+- 两指、⌘/Ctrl 加滚轮缩放视口；空白处拖动平移。右键可选择重叠元素；图层列表支持锁定与选取。
+- Shift 多选，支持组合、解组、对齐、等距分布。方向键微移，Shift 加方向键移动 10pt。⌘/Ctrl Z 撤销，⇧⌘/Ctrl Z 重做，⌘/Ctrl D 复制。
+- 画布由多个图层组成。网格图层内部可以有多行多列和合并单元格，图层列表只显示整个层；“编辑内容”进入该层后，点格子添加内容、拖内容换格、拖列边界调宽，Shift 多选格子后合并或拆分。多项内容不能无损合并时会提示先移动内容。
+- 网格自动行高随文字增长，空行可收起；编辑状态临时显示空格，导出不保留这些编辑占位。还可调整行列间距、固定行高，在指定位置插入或删除空行列。图层之间用“跟随前一项”顺延；固定画布溢出会提示并阻止导出。
 
-只有两件事是平台相关、在 `render.js` 里重写的：**量文字**（手机是 Skia 段落，这里是 Canvas 2D 的 `measureText`）和**画**（`SkCanvas` → `CanvasRenderingContext2D`）。常数、公式、绘制顺序都照 `painter.ts` / `measure.ts` 抄。
+## 字段、字体与手写
 
-其余几个文件是工坊自己的界面：`sample.js`（四条示例记录、六张示意封面、分享开关）、`ui.js`（编辑器主体：模版库、画布交互、检查器）、`modes.js`（图层聚焦与布局模式）、`layers.js`（图层树面板）、`app.js`（菜单、选图、导入导出）。
+记录词条包含内置字段和用户自定义词条。自定义绑定存稳定 ID 与显示名称，不按名称偷偷重连。导入遇到缺失词条时，先逐项选择本地词条或明确留空，再导入。预览字段只保存在浏览器草稿中，不随模板导出。私人字段默认关闭。
 
-## 一眼看懂
+八款字体包含中文黑体、宋体、文楷、小薇和四款西文。西文使用明确的中文回退链；预览、测量、导出等待同一份字体加载完成。内置字重使用真实静态 400/700 文件，小薇只有 400；导入单文件使用其默认字重。支持导入 TTF/OTF（每个不超过 32MB），文件哈希校验并嵌入模板依赖。字库和许可证来源见 `assets/fonts/poster/manifest.json`（构建后也在 `fonts/manifest.json`）。
 
-- 左栏：两个页签。「模版」页签是九个内置风格、四种起始排版、你自己存的模版（存在浏览器 `localStorage` 里，可改名、复制、删除），下半是预览设置：换示例记录、换封面、换主题色、填开场白与署名、开关分享字段。「图层」页签是整棵图层树：缩进表示层级，点选图层，◉ 控制显示，被收起的图层会标出来。
-- 中间：画布。点选图层，拖动的含义跟着图层走 —— 图片层是「原图在框里露出哪一段」，绝对定位的层是位移，普通层是在兄弟里换位。`⌘` + 滚轮缩放视图，工具条上也有缩放按钮。
-  - **图层聚焦**：选中图层后，工具条上可切「全部 / 突出 / 单独」——「突出」把其他图层调成半透明，「单独」只显示选中的那层，随时切回「全部」预览整体效果。
-  - **布局模式**：点工具条的「布局模式」（或按 `L`），所有元素只显示框线（行 / 列容器是蓝色虚线框，带「行」「列」角标），把任意元素**直接拖进别的行 / 列**——目标容器会高亮，琥珀色的线标出插入位置，松手落地。工具条上还有「＋ 行 / ＋ 列」快速建容器，以及对选中元素的「装进行 / 装进列 / 移出」。
-- 右栏：选中对象的检查器。第一行是工具条（图层名、上移 / 下移 / 复制 / 删除），接着三到五样常用的，其余折进「更多」，末尾是所有节点共用的「布局」块（宽 / 高规则、位置与锚点、装进行 / 列、移出、旋转、不透明度、显示）。
-- 快捷键：`Delete` 删除，方向键换位（绝对定位的是微调，按住 Shift 走大步），`⌘D` 复制，`⌘Z` 撤销，`L` 布局模式，`Esc` 回到画布。
+手写画板生成透明图片和可编辑笔迹数据；iOS App 的 PencilKit 可以保留原生笔迹。没有“把任意文字自动变成本人笔迹”的私有系统能力。
 
-私人字段（票价 / 座位 / 同行人）默认不印，要在左下角「分享开关」里自己打开，和 App 一样。
+## 保存与交换
 
-## 响应式排版是什么意思
+草稿与“我的模版”使用 IndexedDB，能够存放完整字体依赖。内置模板保存为独立副本。撤销历史留在内存，当前草稿持久化；浏览器清理站点数据后需要从导出文件恢复。
 
-模版不是「一张固定比例的画布上堆绝对定位的元素」，而是一棵盒子树，每个盒子按 Figma Auto Layout / CSS flex 的规则摆放子节点（规格见 `Documentation/POSTER.md`）。两个后果在这里能直接看到：
+“导出模版”输出 `.livemark` JSON；App 也接收该文件。导入兼容 gzip 包装，schema 1/2 按本次重做约定拒收，保留原文件与 App 原始记录。“导出图片”使用所选导出宽度、去除空字段占位，缺字体、缺图片或溢出时不会假装成功。超大长图受像素面积限制。
 
-- **字段没值，那一块整个收起**，海报自己变短。关掉左栏的「曲目单」，黑胶唱片那一版会短一截。
-- **图进了框不会被裁死**：框比例、`cover` / `contain`、横纵位置、缩放、倾斜分别可调，拖动图片改的是「露出哪一段」（CSS 的 `object-position`），不是把裁好的那块平移出去露白。
+## 验证边界
 
-## 和 App 对接
+网页编辑预览仍使用 Canvas 2D，App 编辑预览使用原生 Skia；预览不是像素一致性的验收输入。最终 PNG 统一通过 `offline/renderer.js`，App 的 `assets/poster-engine/engine.html` 包含完全相同的 JS 与 WASM。网页不生成系统 Live Photo 配对文件。
 
-- **导出模版**：写出 `<模版名>.livemark`（gzip 过的 JSON，和 App 写的一模一样；`build 26` 以前的 `.lmtemplate` / `.encoretemplate` 也还收得进来）。编码规则由 `document.ts` 保证：键按字典序排、缺省值整把省掉、`Data` 走 base64、日期是不带小数秒的 ISO-8601、UUID 大写带横杠。空画布会被拦下，因为 App 的解码器也不收。
-- **发送到手机**：把导出的文件隔空投送给自己，在手机上点开即进 Livemark，导入时 App 会重新发一个 id，不会覆盖你已有的模版。
-- **导入**：点「导入」或把文件拖到页面上。gzip 与明文 JSON 都认（和 App 一样看魔数）。版本 1 的旧模版会被拒收，提示「这个模版文件来自旧版本（v1）」—— 海报体系 2026-09-18 重做过，这是有意的。
-- **导出图片**：按模版自己的导出宽度（`exportWidth`，1080 / 1440 / 2160）用 `<canvas>` 画一遍再下载；高度永远跟着排版走。占位虚线框不会印上去。
+像素回归采用真实 WASM 软件渲染，分别在 Node/V8 加载网页包、在无窗口 WKWebView 加载 App 内联包；测试页面的 CSP 禁止联网。这可验证两种 JS 运行时和两种打包路径，不能替代 iOS/Android 真机手势、PencilKit 或内存压力验收。
 
-## 做不到的事
+```sh
+node scripts/verify_poster_engine.js
+swiftc scripts/render_poster_webkit.swift -o /tmp/livemark-poster-webkit
+/tmp/livemark-poster-webkit "$PWD/assets/poster-engine/engine.html" "$PWD/.local/poster-parity/requests.json" "$PWD/.local/poster-parity/webkit"
+node scripts/verify_poster_engine.js --compare
+```
 
-- 画布是用 Canvas 2D 重画的，不是 Skia。字体度量、断行位置、`.continuous` 圆角、阴影模糊半径都是近似，和手机上的成品会有几像素的出入；**排版位置、尺寸、颜色、收起与否是精确的**（那部分是同一份代码算的）。
-- 字距靠 `ctx.letterSpacing`，老浏览器上会当成 0。
-- 记录没有封面原图时，App 画的是一张程序化封面；这里画的是同色系的一块底。
-- SF Symbols 用不了：星星是自己画的五角星。
-- 「实况照片」在这里只做成「一张图 + 一段 `.mov`/`.mp4`」：鼠标停在图层上会静音播放，导出的文件里 `video` 与 App 写的一样，但浏览器不生成真正的 Live Photo 配对。
-- 贴纸是把一个表情画成 256 px 的透明 PNG（和 App 的 `renderStickerPNG` 同一个做法），不能像 iOS 那样粘贴系统表情贴纸。
-- 预览用的是四条示例记录与六张示意封面，不读你真实的收藏。
-- 模版存在浏览器本地，换浏览器或清缓存就没了；要留底就导出成文件。
-- 撤销只有一条链（没有重做），自动合并连续的滑杆拖动。
+也可直接比较设备实际导出的两张图片：`node scripts/compare_poster_pngs.js app.png web.png`。它解码 RGBA 后逐像素比较，PNG 压缩方式或元数据不同不会被误判成像素差异。测试产物保存在 `.local/poster-parity/`，不进入发布包。

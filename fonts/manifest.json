@@ -1,0 +1,204 @@
+[
+  {
+    "id": "noto-sans-sc",
+    "file": "NotoSansSC.ttf",
+    "bytes": 10595876,
+    "sha256": "f202dac4ea2a718e6269ca986774b2a0a0e117032fa2fade78f8f37143e2e0cf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf",
+    "license": "noto-sans-sc-OFL.txt",
+    "upstreamSha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da",
+    "upstreamBytes": 17772300,
+    "instances": [
+      {
+        "file": "NotoSansSC.ttf",
+        "weight": 400,
+        "bytes": 10595876,
+        "sha256": "f202dac4ea2a718e6269ca986774b2a0a0e117032fa2fade78f8f37143e2e0cf"
+      },
+      {
+        "file": "NotoSansSC-Bold.ttf",
+        "weight": 700,
+        "bytes": 10585400,
+        "sha256": "35e0f43ccc3b9f08f3c92e9e8176423226ebe43f9e48353bbb8f93ec3fd5a539"
+      }
+    ],
+    "derivation": "fonttools 4.65.0 varLib.instancer, complete glyph set, static wght 400 and 700, updateFontNames=True"
+  },
+  {
+    "id": "noto-serif-sc",
+    "file": "NotoSerifSC.ttf",
+    "bytes": 14854656,
+    "sha256": "2ddc6ff165a90a20fbc05ce503af454955e8ce67afc54e53d291614bb578169b",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifsc/NotoSerifSC%5Bwght%5D.ttf",
+    "license": "noto-serif-sc-OFL.txt",
+    "upstreamSha256": "050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9",
+    "upstreamBytes": 25125512,
+    "instances": [
+      {
+        "file": "NotoSerifSC.ttf",
+        "weight": 400,
+        "bytes": 14854656,
+        "sha256": "2ddc6ff165a90a20fbc05ce503af454955e8ce67afc54e53d291614bb578169b"
+      },
+      {
+        "file": "NotoSerifSC-Bold.ttf",
+        "weight": 700,
+        "bytes": 14853636,
+        "sha256": "c522280c17862eaf924e6fd30e736cd2cb237de52fc31cbb6b93cfc47f15ae38"
+      }
+    ],
+    "derivation": "fonttools 4.65.0 varLib.instancer, complete glyph set, static wght 400 and 700, updateFontNames=True"
+  },
+  {
+    "id": "lxgw-wenkai",
+    "file": "LXGWWenKaiTC-Regular.ttf",
+    "bytes": 13110528,
+    "sha256": "4fcc5aec11cbbf737b0cfab7b63796f7f280087a7a656b2f13342cd5e5318d95",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lxgwwenkaitc/LXGWWenKaiTC-Regular.ttf",
+    "license": "lxgw-wenkai-OFL.txt",
+    "instances": [
+      {
+        "file": "LXGWWenKaiTC-Regular.ttf",
+        "weight": 400,
+        "bytes": 13110528,
+        "sha256": "4fcc5aec11cbbf737b0cfab7b63796f7f280087a7a656b2f13342cd5e5318d95"
+      },
+      {
+        "file": "LXGWWenKaiTC-Bold.ttf",
+        "weight": 700,
+        "bytes": 12881104,
+        "sha256": "5c9feadfd928f3ae3860e7d001ad3d0d0c55b0157fff08cd4d51b51aca677f23",
+        "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lxgwwenkaitc/LXGWWenKaiTC-Bold.ttf"
+      }
+    ]
+  },
+  {
+    "id": "zcool-xiaowei",
+    "file": "ZCOOLXiaoWei-Regular.ttf",
+    "bytes": 6313808,
+    "sha256": "a42b620140f493db42f741351dfbf343c0936d58588ee8004b8b2a218d997ff1",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf",
+    "license": "zcool-xiaowei-OFL.txt"
+  },
+  {
+    "id": "cormorant",
+    "file": "CormorantGaramond.ttf",
+    "bytes": 773992,
+    "sha256": "5f0c208aa786fb8793a6f608dddace859a953af5daf35653405fa191798d626e",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond%5Bwght%5D.ttf",
+    "license": "cormorant-OFL.txt",
+    "upstreamSha256": "b20b7d9626dd956b2c5e558692ad328b1f19e3275e2782db4fa07670d83f35e0",
+    "upstreamBytes": 1195560,
+    "instances": [
+      {
+        "file": "CormorantGaramond.ttf",
+        "weight": 400,
+        "bytes": 773992,
+        "sha256": "5f0c208aa786fb8793a6f608dddace859a953af5daf35653405fa191798d626e"
+      },
+      {
+        "file": "CormorantGaramond-Bold.ttf",
+        "weight": 700,
+        "bytes": 773112,
+        "sha256": "a0c3bb83a7987fb951a98b45f0f00160dc1b73e6393af70d2033d92795d9f694"
+      }
+    ],
+    "derivation": "fonttools 4.65.0 varLib.instancer, complete glyph set, static wght 400 and 700, updateFontNames=True"
+  },
+  {
+    "id": "playfair",
+    "file": "PlayfairDisplay.ttf",
+    "bytes": 194576,
+    "sha256": "9ae96c60234c4376ac172b3410924c98cb0e39900a9d7345bbda6c5309532ab7",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf",
+    "license": "playfair-OFL.txt",
+    "upstreamSha256": "c40f2293766a503bc70cce9e512ef844a4ccb7cbcde792fe2ea31d191917d8d6",
+    "upstreamBytes": 300724,
+    "instances": [
+      {
+        "file": "PlayfairDisplay.ttf",
+        "weight": 400,
+        "bytes": 194576,
+        "sha256": "9ae96c60234c4376ac172b3410924c98cb0e39900a9d7345bbda6c5309532ab7"
+      },
+      {
+        "file": "PlayfairDisplay-Bold.ttf",
+        "weight": 700,
+        "bytes": 194916,
+        "sha256": "4291782b6305de93ef8ec5084788f3a1c680ed980336f5d4384960676d7b4149"
+      }
+    ],
+    "derivation": "fonttools 4.65.0 varLib.instancer, complete glyph set, static wght 400 and 700, updateFontNames=True"
+  },
+  {
+    "id": "caveat",
+    "file": "Caveat.ttf",
+    "bytes": 266100,
+    "sha256": "56b8a8a43664c2bf81e18832a2f0e0d63828a28cd2f5761ec00751dd5bb88103",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/caveat/Caveat%5Bwght%5D.ttf",
+    "license": "caveat-OFL.txt",
+    "upstreamSha256": "0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988",
+    "upstreamBytes": 403648,
+    "instances": [
+      {
+        "file": "Caveat.ttf",
+        "weight": 400,
+        "bytes": 266100,
+        "sha256": "56b8a8a43664c2bf81e18832a2f0e0d63828a28cd2f5761ec00751dd5bb88103"
+      },
+      {
+        "file": "Caveat-Bold.ttf",
+        "weight": 700,
+        "bytes": 266456,
+        "sha256": "0a71de7c0f19f93aac97312f369b69518ae4ef1d93a2ccecc1cd67bd2cf75781"
+      }
+    ],
+    "derivation": "fonttools 4.65.0 varLib.instancer, complete glyph set, static wght 400 and 700, updateFontNames=True"
+  },
+  {
+    "id": "space-grotesk",
+    "file": "SpaceGrotesk.ttf",
+    "bytes": 88300,
+    "sha256": "21ec382ecb51435de457a5bf9e313fe5f4eba933c94ce8e4a1cbe9994df41a25",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/spacegrotesk/SpaceGrotesk%5Bwght%5D.ttf",
+    "license": "space-grotesk-OFL.txt",
+    "upstreamSha256": "acad6de1fc93436f5c0f1f4137751ef04f1aea3063e7036535970ffcfbd79f72",
+    "upstreamBytes": 136676,
+    "instances": [
+      {
+        "file": "SpaceGrotesk.ttf",
+        "weight": 400,
+        "bytes": 88300,
+        "sha256": "21ec382ecb51435de457a5bf9e313fe5f4eba933c94ce8e4a1cbe9994df41a25"
+      },
+      {
+        "file": "SpaceGrotesk-Bold.ttf",
+        "weight": 700,
+        "bytes": 88200,
+        "sha256": "4e330c1557b9576614b9a3d4dd80ab5510234c4e8aaae9b434f4b2e542b3dabe"
+      }
+    ],
+    "derivation": "fonttools 4.65.0 varLib.instancer, complete glyph set, static wght 400 and 700, updateFontNames=True"
+  },
+  {
+    "id": "noto-emoji",
+    "role": "fixed-emoji-fallback",
+    "file": "NotoEmoji-Regular.ttf",
+    "bytes": 886628,
+    "sha256": "5af8eae90f965bd51bedee7507a692369d9ea5a6d271abe655af18d86c078391",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoemoji/NotoEmoji%5Bwght%5D.ttf",
+    "sourceGitBlob": "c2c26ab612a88a8610ff9cfbb89299bf2aea6c7a",
+    "license": "noto-emoji-OFL.txt",
+    "upstreamSha256": "de6c18832938afc99caf132b39d6a30a19bac7f2e812e28db2535b4608d27551",
+    "upstreamBytes": 1982596,
+    "instances": [
+      {
+        "file": "NotoEmoji-Regular.ttf",
+        "weight": 400,
+        "bytes": 886628,
+        "sha256": "5af8eae90f965bd51bedee7507a692369d9ea5a6d271abe655af18d86c078391"
+      }
+    ],
+    "derivation": "fonttools 4.65.0 varLib.instancer, complete glyph set, static wght 400, updateFontNames=True; monochrome glyf outlines, no color bitmap dependency"
+  }
+]

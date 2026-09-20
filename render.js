@@ -183,8 +183,8 @@
 
     var measuredValue = layoutParagraph({
       text: input.text,
-      family: FAMILY[input.design] || FAMILY['黑体'],
-      weight: WEIGHT[input.weight] || 400,
+      family: input.fontId && global.LMUI ? global.LMUI.family(input.fontId) : FAMILY[input.design] || FAMILY['黑体'],
+      weight: global.LMUI ? global.LMUI.weight(input.fontId, WEIGHT[input.weight] || 400) : WEIGHT[input.weight] || 400,
       size: fs,
       letterSpacing: input.tracking,
       align: inlineRow ? '右对齐' : input.alignment,
@@ -206,8 +206,8 @@
     if ((input.label || '').length > 0) {
       label = layoutParagraph({
         text: input.label,
-        family: inlineRow ? (FAMILY[input.design] || FAMILY['黑体']) : FAMILY['等宽'],
-        weight: inlineRow ? (WEIGHT[input.weight] || 400) : LABEL_WEIGHT,
+        family: input.fontId && global.LMUI ? global.LMUI.family(input.fontId) : inlineRow ? (FAMILY[input.design] || FAMILY['黑体']) : FAMILY['等宽'],
+        weight: global.LMUI ? global.LMUI.weight(input.fontId, inlineRow ? (WEIGHT[input.weight] || 400) : LABEL_WEIGHT) : inlineRow ? (WEIGHT[input.weight] || 400) : LABEL_WEIGHT,
         size: inlineRow ? fs : Math.max(6, fs * LABEL_SIZE),
         letterSpacing: inlineRow ? input.tracking : LABEL_TRACKING,
         align: '左对齐',
@@ -239,7 +239,7 @@
   function measure(request) {
     var key = [
       request.text, request.label, request.inlineLabel ? 1 : 0, request.fontSize,
-      request.weight, request.design, request.alignment, request.tracking,
+      request.weight, request.design, request.fontId, request.alignment, request.tracking,
       request.lineLimit, request.chip ? 1 : 0, request.barcode ? 1 : 0,
       isFinite(request.maxWidth) ? request.maxWidth : 'inf',
     ].join('');
@@ -353,10 +353,7 @@
   /// images：Map<key, HTMLImageElement | HTMLVideoElement | null>
   /// 回填每一层的框（画布 pt，未旋转），编辑器拿它做命中测试与选中框；
   /// 图片层还带溢出量，拖动改 focus 要除以它。
-  /// options.alphaFor(item)：编辑器的「聚焦 / 布局」模式用它把某些图元调暗
-  /// （返回 0 就整个跳过，只回填 frame）。不影响导出——导出时不传 options。
-  function paintScene(ctx, scene, images, options) {
-    var alphaFor = options && options.alphaFor ? options.alphaFor : null;
+  function paintScene(ctx, scene, images) {
     var frames = {};
     frames[CANVAS_LAYER_ID] = { x: 0, y: 0, width: scene.width, height: scene.height };
     ctx.save();
@@ -397,18 +394,6 @@
       }
       if (item.kind === 'clipEnd') {
         if (clipDepth > 0) { ctx.restore(); clipDepth -= 1; }
-        return;
-      }
-      var alpha = alphaFor ? alphaFor(item) : 1;
-      if (alpha <= 0) {
-        frames[item.id] = Object.assign({}, item.frame);
-        return;
-      }
-      if (alpha < 1) {
-        ctx.save();
-        ctx.globalAlpha *= alpha;
-        frames[item.id] = paintItem(ctx, item, images);
-        ctx.restore();
         return;
       }
       frames[item.id] = paintItem(ctx, item, images);
@@ -712,7 +697,7 @@
     var labelColor = css(item.color, item.inlineLabel ? 1 : LABEL_ALPHA);
     var block = layoutTextBlock({
       text: item.value, label: item.label, inlineLabel: item.inlineLabel,
-      fontSize: fs, weight: item.weight, design: item.design,
+      fontSize: fs, weight: item.weight, design: item.design, fontId: item.fontId,
       alignment: item.align, tracking: item.tracking, lineLimit: item.lineLimit,
       chip: item.chip !== null && item.chip !== undefined,
       barcode: item.content === 'barcode', maxWidth: frameWidth,
