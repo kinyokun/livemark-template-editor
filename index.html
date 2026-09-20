@@ -30,6 +30,7 @@
       <div class="menu-wrap">
         <button class="btn small primary" id="btnAddElement">添加元素 ＋</button>
       </div>
+      <div class="stage-tools" id="stageTools"></div>
       <div class="grow"></div>
       <span class="hint" id="canvasNote"></span>
     </div>
@@ -40,8 +41,8 @@
       </div>
     </div>
     <div class="stage-foot">
-      <span>点选图层 · 拖图片调露出哪一段 · 拖普通图层换位 · ⌘滚轮缩放</span>
-      <span>Delete 删除 · 方向键换位 · ⌘D 复制 · ⌘Z 撤销 · Esc 回到画布</span>
+      <span>点选图层 · 拖图片调露出哪一段 · 拖普通图层换位 · 布局模式里拖拽换行/列 · ⌘滚轮缩放</span>
+      <span>Delete 删除 · 方向键换位 · ⌘D 复制 · ⌘Z 撤销 · L 布局模式 · Esc 回到画布</span>
       <span id="sizeNote"></span>
     </div>
   </section>
@@ -56,12 +57,15 @@
 <input type="file" id="filePickVideo" accept="video/quicktime,video/mp4,.mov,.mp4" hidden>
 
 <!-- core.js 是 App 的 TypeScript 原样编译过来的：模型、排版引擎、文件编码、九个内置风格。
-     render.js 注入「量文字」与「画」，其余三个是工坊自己的界面。 -->
+     render.js 注入「量文字」与「画」；ui.js 是编辑器主体，modes.js（聚焦 / 布局模式）、
+     layers.js（图层树面板）按功能拆成独立模块，app.js 负责启动。 -->
 <script src="covers.js"></script>
 <script src="core.js"></script>
 <script src="render.js"></script>
 <script src="sample.js"></script>
 <script src="ui.js"></script>
+<script src="modes.js"></script>
+<script src="layers.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
