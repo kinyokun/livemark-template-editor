@@ -15,8 +15,8 @@
   <button class="btn" id="btnSave">存入模版库</button>
   <button class="btn" id="btnExportFile">导出模版</button>
   <button class="btn primary" id="btnExportPNG">导出图片</button>
-  <div class="tip">导出的 .lmtemplate 用隔空投送发到 iPhone，双击即在 Livemark 里打开。</div>
-  <input type="file" id="fileImport" accept=".lmtemplate,.encoretemplate,.json,application/json" hidden>
+  <div class="tip">导出的 .livemark 用隔空投送发到手机，点开即在 Livemark 里打开。</div>
+  <input type="file" id="fileImport" accept=".livemark,.lmtemplate,.encoretemplate,.json,application/json" hidden>
 </header>
 
 <div class="shell">
@@ -40,8 +40,8 @@
       </div>
     </div>
     <div class="stage-foot">
-      <span>拖动移动 · 滚轮缩放 · 角点拉伸</span>
-      <span>Delete 删除 · 方向键微调 · ⌘D 复制 · ⌘Z 撤销</span>
+      <span>点选图层 · 拖图片调露出哪一段 · 拖普通图层换位 · ⌘滚轮缩放</span>
+      <span>Delete 删除 · 方向键换位 · ⌘D 复制 · ⌘Z 撤销 · Esc 回到画布</span>
       <span id="sizeNote"></span>
     </div>
   </section>
@@ -50,15 +50,17 @@
 </div>
 
 <div class="toast" id="toast"></div>
-<div class="drop-veil" id="dropVeil">松手导入 .lmtemplate</div>
+<div class="drop-veil" id="dropVeil">松手导入 .livemark</div>
 
 <input type="file" id="filePickImage" accept="image/*" hidden>
 <input type="file" id="filePickVideo" accept="video/quicktime,video/mp4,.mov,.mp4" hidden>
 
-<script src="builtins.js"></script>
+<!-- core.js 是 App 的 TypeScript 原样编译过来的：模型、排版引擎、文件编码、九个内置风格。
+     render.js 注入「量文字」与「画」，其余三个是工坊自己的界面。 -->
 <script src="covers.js"></script>
-<script src="model.js"></script>
+<script src="core.js"></script>
 <script src="render.js"></script>
+<script src="sample.js"></script>
 <script src="ui.js"></script>
 <script src="app.js"></script>
 </body>

@@ -1,10 +1,15 @@
-// 界面：模版库、画布交互、三个检查器。控件与文案照 TemplateEditor.swift /
-// TemplateEditorInspectors.swift 来，能用图标或禁用态说清楚的就不写句子。
+// 界面：模版库、画布交互、按节点类型分的检查器。
+//
+// 结构照 App 的 `TemplateEditor.tsx` / `Inspectors.tsx`（Documentation/POSTER.md 第 7 节）：
+// 选中的是树上的一个节点，检查器第一行是工具条，接着三到五样常用的，其余折进「更多」，
+// 末尾是所有节点共用的「布局」块。树的增删改一律走 core.js 里 App 自己的那几个函数
+// （insertAfter / moveNode / wrapNode / unwrapNode …），所以两边的行为不会走样。
 (function (global) {
   'use strict';
 
-  var LM = global.LM, R = global.LMRender;
-  var STORE_KEY = 'livemark.templates.v1';
+  var LM = global.LMCore, R = global.LMRender, S = global.LMSample;
+  var STORE_KEY = 'livemark.templates.v2';
+  var CANVAS = 'canvas';
 
   // MARK: - 小工具
 
@@ -22,12 +27,10 @@
     return node;
   }
   function pct(v) { return Math.round(v * 100) + '%'; }
-  function signedPct(v) { return (v >= 0 ? '+' : '') + Math.round(v * 100) + '%'; }
-  function deg(v) { return v.toFixed(1) + '°'; }
-  function one(v) { return v.toFixed(1); }
-  function pt(v) { return String(Math.round(v)); }
+  function deg(v) { return Math.round(v) + '°'; }
+  function pt(v) { return Math.round(v) + ' pt'; }
   function ratio(v) { return v.toFixed(2); }
-  function px(v) { return Math.round(v) + ' px'; }
+  function clone(value) { return JSON.parse(JSON.stringify(value)); }
 
   function mimeFor(base64) {
     var head = base64.slice(0, 16);
@@ -38,357 +41,381 @@
     return 'image/heic';
   }
 
+  function dataURL(source) {
+    if (!source) return null;
+    if (source.uri) return source.uri;
+    if (source.data) {
+      return source.data.indexOf('data:') === 0
+        ? source.data
+        : 'data:' + mimeFor(source.data) + ';base64,' + source.data;
+    }
+    return null;
+  }
+
   // MARK: - 图片缓存
+  //
+  // 键就是 `SceneImageSource.key`，和 App 的 PaintContext 一样。
 
   function ImageStore(onLoad) {
-    this.cache = {};
+    this.map = new Map();
+    this.pending = {};
     this.onLoad = onLoad;
   }
-  ImageStore.prototype.get = function (key, base64) {
-    if (!base64) return null;
-    var entry = this.cache[key];
-    if (entry && entry.data === base64) return entry.ready ? entry.img : null;
-    var img = new Image();
+  ImageStore.prototype.sync = function (sources) {
     var self = this;
-    var record = { data: base64, img: img, ready: false };
-    this.cache[key] = record;
-    img.onload = function () { record.ready = true; self.onLoad(); };
-    img.onerror = function () { record.ready = false; };
-    img.src = base64.indexOf('data:') === 0 ? base64 : 'data:' + mimeFor(base64) + ';base64,' + base64;
-    return null;
+    sources.forEach(function (source) {
+      if (self.map.has(source.key) || self.pending[source.key]) return;
+      var url = dataURL(source);
+      if (!url) return;
+      self.pending[source.key] = true;
+      var img = new Image();
+      img.onload = function () {
+        delete self.pending[source.key];
+        self.map.set(source.key, img);
+        self.onLoad();
+      };
+      img.onerror = function () {
+        delete self.pending[source.key];
+        self.map.set(source.key, null);
+      };
+      img.src = url;
+    });
   };
+  /// 实况照片的那一段视频：鼠标停上去静音播放。
+  ImageStore.prototype.putVideo = function (key, video) { this.map.set(key, video); };
 
   // MARK: - 应用
 
   function App() {
-    var self = this;
-    this.options = LM.defaultOptions();
-    this.records = LM.samples();
-    this.recordIndex = 0;
-    this.selection = 'canvas';
-    this.frames = {};
-    this.undoStack = [];
-    this.lastUndoTag = null;
-    this.lastUndoTime = 0;
-    this.starterUndo = null;
-    this.videos = {};
-    this.hoverElement = null;
-    this.images = new ImageStore(function () { self.render(); });
-    this.covers = {};
+    this.template = LM.builtInTemplate('经典票根');
+    this.selection = CANVAS;
+    this.preview = S.defaultPreview();
+    this.zoom = 1;
+    this.history = [];
+    this.more = false;              // 检查器的「更多」是否展开
     this.library = this.loadLibrary();
-    this.builtIns = (global.LIVEMARK_BUILTIN_TEMPLATES || []).map(function (doc) { return LM.sanitize(doc.template); });
-    this.currentSource = null;
-    this.loadCovers();
-    this.template = this.builtIns.length ? this.openCopy(this.builtIns[0]) : LM.starter('信息票根');
+    this.frames = {};
+    this.scene = null;
+    var self = this;
+    this.images = new ImageStore(function () { self.draw(); });
+    this.canvas = document.getElementById('canvas');
+    this.overlay = document.getElementById('overlay');
+    this.bindCanvas();
+    this.bindKeys();
   }
 
-  App.prototype.loadCovers = function () {
-    var self = this;
-    var data = global.LIVEMARK_COVERS || {};
-    Object.keys(data).forEach(function (name) {
-      var img = new Image();
-      img.onload = function () { self.render(); };
-      img.src = data[name];
-      self.covers[name] = img;
-    });
-  };
-  App.prototype.record = function () { return this.records[this.recordIndex]; };
-  App.prototype.coverImage = function () {
-    var img = this.covers[this.record().cover];
-    return img && img.complete && img.naturalWidth ? img : null;
-  };
-  App.prototype.accent = function () {
-    var id = this.options.accent;
-    for (var i = 0; i < LM.ACCENTS.length; i++) if (LM.ACCENTS[i].id === id) return LM.ACCENTS[i];
-    return LM.ACCENTS[0];
-  };
-  App.prototype.env = function (placeholders) {
-    var accent = this.accent();
-    return {
-      bits: LM.bitsFor(this.record(), this.options),
-      accentHex: accent.hex, deepHex: accent.deepHex,
-      images: this.images, coverImage: this.coverImage(),
-      placeholders: !!placeholders,
-      videoFor: this.videoFor.bind(this)
-    };
-  };
-  App.prototype.openCopy = function (template) {
-    var copy = LM.sanitize(LM.clone(template));
-    copy.id = LM.uuid();
-    copy.elements.forEach(function (el) { el.id = LM.uuid(); });
-    return copy;
-  };
-
-  // MARK: 模版库
+  // MARK: 模版库（localStorage）
 
   App.prototype.loadLibrary = function () {
     try {
-      var raw = global.localStorage.getItem(STORE_KEY);
-      if (!raw) return [];
-      return JSON.parse(raw).map(LM.sanitize);
+      var raw = localStorage.getItem(STORE_KEY);
+      return raw ? JSON.parse(raw) : [];
     } catch (e) { return []; }
   };
   App.prototype.saveLibrary = function () {
-    try { global.localStorage.setItem(STORE_KEY, JSON.stringify(this.library)); }
-    catch (e) { this.toast('浏览器存不下了', true); }
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(this.library));
+    } catch (e) {
+      this.toast('存不下了：浏览器的本地存储满了，导出成文件吧');
+    }
+  };
+  App.prototype.storeTemplate = function () {
+    var copy = clone(this.template);
+    copy.updatedAt = LM.isoString();
+    var index = -1;
+    for (var i = 0; i < this.library.length; i++) if (this.library[i].id === copy.id) index = i;
+    if (index >= 0) this.library[index] = copy; else this.library.push(copy);
+    this.saveLibrary();
+    this.refresh();
+    this.toast('已存入模版库');
   };
 
-  // MARK: 撤销
+  // MARK: 撤销（一条链，滑杆的连续拖动自动合并）
 
-  App.prototype.snapshot = function () { return JSON.stringify(this.template); };
-  App.prototype.pushUndo = function (tag) {
-    var now = Date.now();
-    if (tag && tag === this.lastUndoTag && now - this.lastUndoTime < 700) { this.lastUndoTime = now; return; }
-    this.undoStack.push(this.snapshot());
-    if (this.undoStack.length > 60) this.undoStack.shift();
-    this.lastUndoTag = tag || null;
-    this.lastUndoTime = now;
-  };
-  App.prototype.undo = function () {
-    if (!this.undoStack.length) { this.toast('没有可撤销的'); return; }
-    this.template = JSON.parse(this.undoStack.pop());
-    this.lastUndoTag = null;
-    if (this.selectedElement() === null && this.selection !== 'canvas' && this.selection !== 'cover') this.selection = 'canvas';
+  App.prototype.edit = function (tag, mutate) {
+    var before = clone(this.template);
+    var last = this.history[this.history.length - 1];
+    if (!(tag && last && last.tag === tag)) this.history.push({ tag: tag, template: before });
+    if (this.history.length > 80) this.history.shift();
+    var draft = clone(this.template);
+    mutate(draft);
+    this.template = LM.sanitizeTemplate(draft);
+    if (this.selection !== CANVAS && !LM.findNode(this.template.root, this.selection)) {
+      this.selection = CANVAS;
+    }
     this.refresh();
   };
-  /// 改一处：先存快照，再改，再重画。tag 相同且很近的连续改动合并成一步。
-  /// 带 tag 的是连续改动（滑杆、输入框）：只重画，不重建检查器，免得拖动时控件被换掉。
-  /// 不带 tag 的会改变界面结构，整块重建。
-  App.prototype.edit = function (tag, fn) {
-    this.pushUndo(tag);
-    fn(this.template);
-    if (tag) { this.render(); this.updateBars(); } else { this.refresh(); }
+  App.prototype.undo = function () {
+    var entry = this.history.pop();
+    if (!entry) return this.toast('没有可撤销的了');
+    this.template = entry.template;
+    if (this.selection !== CANVAS && !LM.findNode(this.template.root, this.selection)) {
+      this.selection = CANVAS;
+    }
+    this.refresh();
+  };
+  App.prototype.replaceTemplate = function (template, keepHistory) {
+    if (!keepHistory) this.history = [];
+    this.template = LM.sanitizeTemplate(template);
+    this.selection = CANVAS;
+    this.more = false;
+    this.refresh();
   };
 
-  App.prototype.selectedElement = function () {
+  // MARK: 选中的节点
+
+  App.prototype.node = function () {
+    if (this.selection === CANVAS) return null;
+    return LM.findNode(this.template.root, this.selection);
+  };
+  App.prototype.isRoot = function (id) { return this.template.root.id === id; };
+
+  App.prototype.updateSelected = function (tag, mutate) {
     var id = this.selection;
-    for (var i = 0; i < this.template.elements.length; i++) if (this.template.elements[i].id === id) return this.template.elements[i];
-    return null;
+    if (id === CANVAS) return;
+    this.edit(tag, function (draft) {
+      draft.root = LM.updateNode(draft.root, id, function (node) {
+        var copy = clone(node);
+        mutate(copy);
+        return copy;
+      });
+    });
   };
-
-  // MARK: 实况照片
-
-  App.prototype.videoFor = function (el) {
-    if (!LM.isLivePhoto(el)) return null;
-    return this.hoverElement === el.id ? this.videos[el.id] : null;
-  };
-  App.prototype.ensureVideo = function (el) {
-    var self = this;
-    if (this.videos[el.id]) return this.videos[el.id];
-    var video = document.createElement('video');
-    video.muted = true; video.playsInline = true; video.loop = true;
-    video.src = 'data:video/mp4;base64,' + el.videoData;
-    video.addEventListener('timeupdate', function () { if (self.hoverElement === el.id) self.render(); });
-    this.videos[el.id] = video;
-    return video;
+  App.prototype.updateCanvas = function (tag, mutate) {
+    this.edit(tag, function (draft) { mutate(draft.canvas); });
   };
 
   // MARK: - 渲染
 
-  App.prototype.refresh = function () {
-    this.render();
-    this.buildLibrary();
-    this.buildInspector();
-    this.updateBars();
+  App.prototype.buildScene = function () {
+    var context = S.context(this.preview);
+    this.context = context;
+    this.scene = LM.buildScene(this.template, context, { placeholders: true });
+    this.images.sync(LM.sceneImageSources(this.scene));
+    return this.scene;
   };
-  App.prototype.render = function () {
-    var t = this.template;
-    var wrap = document.getElementById('canvasWrap');
-    var availW = Math.max(120, wrap.clientWidth - 36);
-    var availH = Math.max(120, wrap.clientHeight - 36);
-    var height = LM.canvasHeight(t);
-    var s = Math.min(availW / LM.CANVAS_W, availH / height);
-    s = Math.max(0.2, Math.min(s, 2.2));
-    this.viewScale = s;
-    var dpr = Math.min(3, global.devicePixelRatio || 1);
-    var cssW = LM.CANVAS_W * s, cssH = height * s;
-    var canvas = document.getElementById('canvas');
-    var overlay = document.getElementById('overlay');
-    [canvas, overlay].forEach(function (c) {
-      c.style.width = cssW + 'px'; c.style.height = cssH + 'px';
-      c.width = Math.round(cssW * dpr); c.height = Math.round(cssH * dpr);
-    });
-    document.getElementById('board').style.width = cssW + 'px';
-    var ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr * s, 0, 0, dpr * s, 0, 0);
-    ctx.clearRect(0, 0, LM.CANVAS_W, height);
-    this.frames = R.draw(ctx, t, this.env(true));
-    this.drawOverlay(overlay, dpr, s);
-    document.getElementById('sizeNote').textContent =
-      '导出 ' + Math.round(LM.exportPixelWidth(t)) + ' × ' + Math.round(LM.exportPixelHeight(t)) + ' px';
+
+  App.prototype.draw = function () {
+    var scene = this.scene || this.buildScene();
+    var dpr = window.devicePixelRatio || 1;
+    var view = this.zoom;
+    var w = scene.width, hgt = scene.height;
+    this.canvas.width = Math.round(w * view * dpr);
+    this.canvas.height = Math.round(hgt * view * dpr);
+    this.canvas.style.width = (w * view) + 'px';
+    this.canvas.style.height = (hgt * view) + 'px';
+    this.overlay.width = this.canvas.width;
+    this.overlay.height = this.canvas.height;
+    this.overlay.style.width = this.canvas.style.width;
+    this.overlay.style.height = this.canvas.style.height;
+
+    var ctx = this.canvas.getContext('2d');
+    ctx.setTransform(dpr * view, 0, 0, dpr * view, 0, 0);
+    ctx.clearRect(0, 0, w, hgt);
+    this.frames = R.paintScene(ctx, scene, this.images.map);
+    this.drawOverlay();
+
+    var note = document.getElementById('sizeNote');
+    if (note) {
+      var pixels = LM.posterPixelSize(this.template, scene);
+      note.textContent = Math.round(w) + ' × ' + Math.round(hgt) + ' pt · 导出 ' +
+        pixels.width + ' × ' + pixels.height + ' px';
+    }
   };
-  App.prototype.drawOverlay = function (overlay, dpr, s) {
-    var ctx = overlay.getContext('2d');
-    ctx.setTransform(dpr * s, 0, 0, dpr * s, 0, 0);
-    ctx.clearRect(0, 0, LM.CANVAS_W, LM.canvasHeight(this.template));
-    var frame = this.selectionFrame();
+
+  App.prototype.drawOverlay = function () {
+    var ctx = this.overlay.getContext('2d');
+    var dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr * this.zoom, 0, 0, dpr * this.zoom, 0, 0);
+    ctx.clearRect(0, 0, this.scene.width, this.scene.height);
+    var frame = this.frames[this.selection];
     if (!frame) return;
+    var laid = this.selection === CANVAS ? null : this.scene.layout.byID[this.selection];
+    var box = laid && laid.rotation ? R.boundingBox(frame, laid.rotation) : frame;
     ctx.save();
-    ctx.strokeStyle = '#c4553f';
-    ctx.lineWidth = 1.5 / s;
-    ctx.setLineDash([5 / s, 4 / s]);
-    ctx.strokeRect(frame.x - 3, frame.y - 3, frame.w + 6, frame.h + 6);
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 1 / this.zoom;
+    ctx.setLineDash(this.selection === CANVAS ? [4, 3] : []);
+    ctx.strokeRect(box.x + 0.5 / this.zoom, box.y + 0.5 / this.zoom,
+      Math.max(0, box.width - 1 / this.zoom), Math.max(0, box.height - 1 / this.zoom));
     ctx.setLineDash([]);
-    ctx.fillStyle = '#c4553f';
-    var r = 3.5 / s;
-    this.handles(frame).forEach(function (p) {
-      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
-    });
+    if (this.selection !== CANVAS) {
+      var s = 5 / this.zoom;
+      ctx.fillStyle = '#3b82f6';
+      [[box.x, box.y], [box.x + box.width, box.y],
+       [box.x, box.y + box.height], [box.x + box.width, box.y + box.height]].forEach(function (p) {
+        ctx.fillRect(p[0] - s / 2, p[1] - s / 2, s, s);
+      });
+    }
     ctx.restore();
   };
-  App.prototype.handles = function (frame) {
-    return [
-      { x: frame.x - 3, y: frame.y - 3 }, { x: frame.x + frame.w + 3, y: frame.y - 3 },
-      { x: frame.x - 3, y: frame.y + frame.h + 3 }, { x: frame.x + frame.w + 3, y: frame.y + frame.h + 3 }
-    ];
+
+  App.prototype.refresh = function () {
+    this.buildScene();
+    this.draw();
+    this.renderLibrary();
+    this.renderInspector();
+    this.renderTopBar();
   };
-  App.prototype.selectionFrame = function () {
-    if (this.selection === 'canvas') return null;
-    if (this.selection === 'cover') return this.template.cover.visible ? this.frames.cover : null;
-    return this.frames[this.selection] || null;
+
+  App.prototype.toast = function (message) {
+    var node = document.getElementById('toast');
+    node.textContent = message;
+    node.classList.add('on');
+    clearTimeout(this._toast);
+    this._toast = setTimeout(function () { node.classList.remove('on'); }, 2200);
   };
 
   // MARK: - 顶栏与图层名
 
-  App.prototype.layerTitle = function (el) {
-    if (LM.hasImage(el)) {
-      if (LM.isLivePhoto(el)) return '实况照片';
-      return el.isSticker === true ? '系统贴纸' : '图片图层';
+  App.prototype.layerTitle = function (node) {
+    if (!node) return '画布与底图';
+    if (LM.isStackNode(node)) {
+      return (node.direction === 'row' ? '行容器' : '列容器') + ' · ' + node.children.length + ' 项';
     }
-    if (el.shape) return el.shape;
-    if (el.field === '自定义文字') return '文字 · ' + LM.prefix(el.text, 8);
-    return LM.fieldName(el.field);
-  };
-  App.prototype.selectionTitle = function () {
-    if (this.selection === 'canvas') return '画布与底图';
-    if (this.selection === 'cover') return '封面图层';
-    var el = this.selectedElement();
-    return el ? this.layerTitle(el) : '信息';
-  };
-  App.prototype.updateBars = function () {
-    document.getElementById('layerName').textContent = this.selectionTitle();
-    var note = document.getElementById('canvasNote');
-    if (this.template.elements.length >= LM.MAX_ELEMENTS) { note.textContent = '最多 80 个元素'; note.className = 'hint warn'; }
-    else { note.textContent = this.template.name; note.className = 'hint'; }
-    document.getElementById('btnAddElement').disabled = this.template.elements.length >= LM.MAX_ELEMENTS;
+    if (LM.isTextNode(node)) {
+      return node.field === '自定义文字' ? ('文字「' + (node.text || '空') + '」') : ('文字 · ' + node.field);
+    }
+    if (LM.isImageNode(node)) {
+      if (node.isSticker) return '贴纸';
+      if (node.source === 'cover') return '封面';
+      return LM.nodeIsLivePhoto(node) ? '实况照片' : '图片';
+    }
+    if (LM.isShapeNode(node)) return '形状 · ' + node.shape;
+    return '间隔';
   };
 
-  App.prototype.toast = function (text, warn) {
-    var node = document.getElementById('toast');
-    node.textContent = text;
-    node.className = 'toast on' + (warn ? ' warn' : '');
-    clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(function () { node.className = 'toast'; }, 2200);
+  App.prototype.renderTopBar = function () {
+    var label = document.getElementById('layerName');
+    if (label) label.textContent = this.layerTitle(this.node());
+    var note = document.getElementById('canvasNote');
+    if (note) {
+      note.textContent = LM.countNodes(this.template.root) + ' / ' + LM.MAX_NODES + ' 个图层 · 缩放 ' + pct(this.zoom);
+    }
+  };
+
+  /// 整棵树，缩进表示层级；容器排在自己的子节点前面。
+  App.prototype.layerRows = function () {
+    var rows = [];
+    var self = this;
+    LM.walkNodes(this.template.root, function (node, info) {
+      rows.push({ node: node, depth: info.depth, title: self.layerTitle(node) });
+    });
+    return rows;
   };
 
   // MARK: - 模版库侧栏
 
-  App.prototype.buildLibrary = function () {
+  App.prototype.renderLibrary = function () {
     var self = this;
     var box = document.getElementById('library');
-    box.innerHTML = '';
-    box.appendChild(h('div', { class: 'section-title', text: '内置模版' }));
-    this.builtIns.forEach(function (t) {
-      box.appendChild(self.libItem(t.name, '', function () { self.openTemplate(self.openCopy(t), 'builtin:' + t.name); }, self.currentSource === 'builtin:' + t.name));
+    box.textContent = '';
+
+    box.appendChild(h('div', { class: 'section-title', text: '内置风格' }));
+    LM.SHARE_STYLES.forEach(function (style) {
+      box.appendChild(h('button', {
+        class: 'lib-item' + (LM.styleForTemplateID(self.template.id) === style ? ' on' : ''),
+        text: style,
+        onclick: function () { self.replaceTemplate(LM.builtInTemplate(style)); },
+      }));
     });
+
     box.appendChild(h('div', { class: 'section-title', text: '起始排版' }));
-    LM.STARTERS.forEach(function (s) {
-      box.appendChild(self.libItem(s.id, s.subtitle, function () { self.openTemplate(LM.starter(s.id), 'starter:' + s.id); }, self.currentSource === 'starter:' + s.id));
+    LM.STARTERS.forEach(function (starter) {
+      box.appendChild(h('button', {
+        class: 'lib-item', title: starter.subtitle,
+        text: starter.id,
+        onclick: function () { self.replaceTemplate(LM.starterTemplate(starter.id)); },
+      }));
     });
+
     box.appendChild(h('div', { class: 'section-title', text: '我的模版' }));
-    if (!this.library.length) box.appendChild(h('div', { class: 'empty', text: '还没有保存的模版' }));
-    this.library.forEach(function (t, index) {
-      var row = h('div', { class: 'lib-row' });
-      row.appendChild(self.libItem(t.name, '', function () { self.openTemplate(self.openCopy(t), 'saved:' + t.id); }, self.currentSource === 'saved:' + t.id));
+    if (!this.library.length) {
+      box.appendChild(h('div', { class: 'empty', text: '还没有存过。改完点顶部「存入模版库」。' }));
+    }
+    this.library.forEach(function (item, index) {
+      var row = h('div', { class: 'lib-row' + (item.id === self.template.id ? ' on' : '') });
       row.appendChild(h('button', {
-        class: 'icon-btn', title: '重命名', text: '✎', onclick: function () {
-          var name = prompt('模版名称', t.name);
+        class: 'lib-item grow', text: item.name,
+        onclick: function () { self.replaceTemplate(clone(item)); },
+      }));
+      row.appendChild(h('button', {
+        class: 'icon-btn', text: '✎', title: '改名',
+        onclick: function () {
+          var name = prompt('模版名', item.name);
           if (name === null) return;
-          t.name = LM.prefix(name.trim(), 40) || t.name;
-          self.saveLibrary(); self.buildLibrary();
-        }
+          item.name = name.trim() || item.name;
+          if (self.template.id === item.id) self.template.name = item.name;
+          self.saveLibrary();
+          self.refresh();
+        },
       }));
       row.appendChild(h('button', {
-        class: 'icon-btn', title: '复制', text: '⧉', onclick: function () {
-          var copy = self.openCopy(t);
-          copy.name = LM.prefix(t.name + ' 副本', 40);
+        class: 'icon-btn', text: '⧉', title: '复制',
+        onclick: function () {
+          var copy = clone(item);
+          copy.id = LM.randomUUID();
+          copy.name = item.name + ' 副本';
           self.library.splice(index + 1, 0, copy);
-          self.saveLibrary(); self.buildLibrary();
-        }
+          self.saveLibrary();
+          self.refresh();
+        },
       }));
       row.appendChild(h('button', {
-        class: 'icon-btn', title: '删除', text: '␡', onclick: function () {
-          if (!confirm('删除「' + t.name + '」？')) return;
+        class: 'icon-btn', text: '␡', title: '删除',
+        onclick: function () {
+          if (!confirm('删掉「' + item.name + '」？')) return;
           self.library.splice(index, 1);
-          self.saveLibrary(); self.buildLibrary();
-        }
+          self.saveLibrary();
+          self.refresh();
+        },
       }));
       box.appendChild(row);
     });
-    box.appendChild(this.previewPanel());
-  };
-  App.prototype.libItem = function (name, sub, onclick, on) {
-    return h('button', { class: 'lib-item' + (on ? ' on' : ''), onclick: onclick }, [
-      h('span', { class: 'thumb' }),
-      h('span', { class: 'name' }, [document.createTextNode(name), sub ? h('span', { class: 'sub', text: sub }) : null])
-    ]);
-  };
-  App.prototype.openTemplate = function (template, source) {
-    this.pushUndo('open');
-    this.template = template;
-    this.currentSource = source || null;
-    this.selection = 'canvas';
-    this.starterUndo = null;
-    this.refresh();
-  };
 
-  App.prototype.previewPanel = function () {
-    var self = this;
-    var panel = h('div', { class: 'panel' });
-    panel.appendChild(h('div', { class: 'section-title', text: '预览' }));
-    var select = h('select', {
-      onchange: function () { self.recordIndex = Number(this.value); self.refresh(); }
-    }, this.records.map(function (r, i) {
-      return h('option', { value: i, text: r.title, selected: i === self.recordIndex });
+    box.appendChild(h('div', { class: 'divider' }));
+    box.appendChild(h('div', { class: 'section-title', text: '预览' }));
+    box.appendChild(this.select('示例记录', S.RECORDS.map(function (entry, i) {
+      return { value: String(i), label: entry.record.title };
+    }), String(this.preview.sample), function (value) {
+      self.preview.sample = Number(value);
+      self.refresh();
     }));
-    panel.appendChild(h('div', { class: 'field' }, [select]));
+    box.appendChild(this.select('封面', [{ value: '', label: '跟着记录' }].concat(
+      S.COVER_KEYS.map(function (key) { return { value: key, label: key }; })
+    ), this.preview.cover === null ? '' : this.preview.cover, function (value) {
+      self.preview.cover = value === '' ? null : value;
+      self.refresh();
+    }));
+    box.appendChild(this.segmented('主题色', S.ACCENTS.map(function (a) { return a.id; }),
+      this.preview.accent, function (value) { self.preview.accent = value; self.refresh(); }));
+    box.appendChild(this.textInput('开场白', this.preview.headline, function (value) {
+      self.preview.headline = value;
+      self.refresh();
+    }));
+    box.appendChild(this.textInput('署名', this.preview.author, function (value) {
+      self.preview.author = value;
+      self.refresh();
+    }));
 
-    var swatches = h('div', { class: 'swatches' });
-    LM.ACCENTS.forEach(function (a) {
-      swatches.appendChild(h('button', {
-        class: 'swatch' + (self.options.accent === a.id ? ' on' : ''),
-        style: 'background:' + a.hex, title: a.name,
-        onclick: function () { self.options.accent = a.id; self.refresh(); }
-      }));
+    box.appendChild(h('div', { class: 'section-title', text: '分享开关' }));
+    var checks = h('div', { class: 'checks' });
+    S.TOGGLES.forEach(function (toggle) {
+      checks.appendChild(h('label', { class: 'toggle' + (toggle.private ? ' private' : '') }, [
+        h('input', {
+          type: 'checkbox', checked: self.preview.options[toggle.key],
+          onchange: function () {
+            var next = {};
+            next[toggle.key] = this.checked;
+            self.preview.options = Object.assign({}, self.preview.options, next);
+            self.refresh();
+          },
+        }),
+        h('span', { text: toggle.label }),
+      ]));
     });
-    panel.appendChild(swatches);
-
-    var headline = h('input', {
-      type: 'text', placeholder: '开场白', value: this.options.headline,
-      oninput: function () { self.options.headline = this.value; self.render(); }
-    });
-    var author = h('input', {
-      type: 'text', placeholder: '署名', value: this.options.author,
-      oninput: function () { self.options.author = this.value; self.render(); }
-    });
-    panel.appendChild(h('div', { class: 'field' }, [headline]));
-    panel.appendChild(h('div', { class: 'field' }, [author]));
-
-    var details = h('details', { class: 'switches' }, [h('summary', { text: '分享开关' })]);
-    var grid = h('div', { class: 'checks' });
-    [['showDate', '日期'], ['showVenue', '地点'], ['showRating', '评分'], ['showQuote', '金句'],
-     ['showNote', '感想'], ['showSetlist', '曲目'], ['showAuthor', '署名'],
-     ['showPrice', '票价'], ['showSeat', '座位'], ['showCompanions', '同行']].forEach(function (pair) {
-      var input = h('input', {
-        type: 'checkbox', checked: self.options[pair[0]],
-        onchange: function () { self.options[pair[0]] = this.checked; self.render(); }
-      });
-      grid.appendChild(h('label', {}, [input, h('span', { text: pair[1] })]));
-    });
-    details.appendChild(grid);
-    details.appendChild(h('div', { class: 'private-note', text: '票价 / 座位 / 同行默认不印' }));
-    panel.appendChild(details);
-    return panel;
+    box.appendChild(checks);
+    box.appendChild(h('div', { class: 'private-note', text: '票价 / 座位 / 同行人是私人字段，和 App 一样默认不印。' }));
   };
 
   // MARK: - 检查器控件
@@ -396,6 +423,7 @@
   function fieldBox(label, control) {
     return h('div', { class: 'field' }, [label ? h('span', { class: 'lab', text: label }) : null, control]);
   }
+
   App.prototype.slider = function (title, value, min, max, step, format, onInput, tag) {
     var out = h('b', { text: format(value) });
     var input = h('input', {
@@ -404,682 +432,819 @@
         var v = Number(this.value);
         out.textContent = format(v);
         onInput(v, tag || title);
-      }
+      },
     });
     return h('div', { class: 'field' }, [
       h('div', { class: 'slider-head' }, [h('span', { text: title }), out]),
-      input
+      input,
     ]);
   };
+
   App.prototype.toggle = function (title, on, onChange) {
-    var self = this;
-    return h('div', { class: 'field toggle' }, [
+    return h('label', { class: 'field toggle' }, [
       h('span', { text: title }),
-      h('input', { type: 'checkbox', checked: on, onchange: function () { onChange(this.checked); } })
+      h('input', { type: 'checkbox', checked: on, onchange: function () { onChange(this.checked); } }),
     ]);
   };
+
   App.prototype.segmented = function (title, options, value, onChange) {
     var seg = h('div', { class: 'seg' });
-    options.forEach(function (o) {
+    options.forEach(function (option) {
+      var v = typeof option === 'string' ? option : option.value;
+      var label = typeof option === 'string' ? option : option.label;
       seg.appendChild(h('button', {
-        class: value === o ? 'on' : '', text: o,
-        onclick: function () { onChange(o); }
+        class: value === v ? 'on' : '', text: label,
+        onclick: function () { onChange(v); },
       }));
     });
     return fieldBox(title, seg);
   };
+
   App.prototype.select = function (title, options, value, onChange) {
     var node = h('select', { onchange: function () { onChange(this.value); } },
-      options.map(function (o) {
-        var v = typeof o === 'string' ? o : o.value, label = typeof o === 'string' ? o : o.label;
+      options.map(function (option) {
+        var v = typeof option === 'string' ? option : option.value;
+        var label = typeof option === 'string' ? option : option.label;
         return h('option', { value: v, text: label, selected: v === value });
       }));
     return fieldBox(title, node);
   };
-  App.prototype.groupedFieldSelect = function (title, value, onChange) {
+
+  App.prototype.textInput = function (title, value, onChange, multiline) {
+    var node = h(multiline ? 'textarea' : 'input', {
+      value: value === undefined || value === null ? '' : value,
+      oninput: function () { onChange(this.value); },
+    });
+    if (multiline) node.value = value || '';
+    return fieldBox(title, node);
+  };
+
+  App.prototype.fieldSelect = function (title, value, onChange) {
     var node = h('select', { onchange: function () { onChange(this.value); } });
-    LM.FIELD_GROUPS.forEach(function (group) {
+    LM.TEMPLATE_FIELD_GROUPS.forEach(function (group) {
       var optgroup = h('optgroup', { label: group });
-      LM.FIELDS.filter(function (f) { return f.group === group; }).forEach(function (f) {
-        optgroup.appendChild(h('option', { value: f.raw, text: f.name, selected: f.raw === value }));
-      });
+      LM.TEMPLATE_FIELDS.filter(function (field) { return LM.fieldGroup(field) === group; })
+        .forEach(function (field) {
+          optgroup.appendChild(h('option', {
+            value: field, text: field + (LM.isPrivateField(field) ? ' ·私人' : ''),
+            selected: field === value,
+          }));
+        });
       node.appendChild(optgroup);
     });
     return fieldBox(title, node);
   };
-  /// 颜色：预设色 + 取色器 + 十六进制。
-  App.prototype.colorControl = function (title, value, onChange, extra) {
-    var hexInput = h('input', { type: 'text', value: LM.colorHex(value), spellcheck: 'false' });
-    var picker = h('input', { type: 'color', value: LM.colorHex(value).slice(0, 7) });
-    function apply(hex) {
-      var c = LM.colorFromHex(hex);
-      if (!c) return;
-      hexInput.value = LM.colorHex(c);
-      picker.value = LM.colorHex(c).slice(0, 7);
-      onChange(c);
+
+  /// 颜色：预设色 + 取色器 + 十六进制 + 主题色开关。
+  App.prototype.colorControl = function (title, value, accent, onColor, onAccent) {
+    var hex = LM.colorHexString(value);
+    var hexInput = h('input', { type: 'text', value: hex, spellcheck: 'false' });
+    var picker = h('input', { type: 'color', value: hex.slice(0, 7) });
+    function apply(next) {
+      var color = LM.colorFromHexString(next);
+      if (!color) return;
+      hexInput.value = LM.colorHexString(color);
+      picker.value = LM.colorHexString(color).slice(0, 7);
+      onColor(color);
     }
     picker.addEventListener('input', function () { apply(this.value); });
     hexInput.addEventListener('change', function () { apply(this.value); });
-    var row = h('div', { class: 'color-row' }, [picker, hexInput]);
+
     var presets = h('div', { class: 'presets' });
-    var list = LM.COLOR_PRESETS.slice();
-    (extra || []).forEach(function (c) { list.push({ name: '对比色', hex: LM.colorHex(c) }); });
-    list.forEach(function (p) {
+    LM.COLOR_PRESETS.forEach(function (color) {
+      var css = LM.colorHexString(color);
       presets.appendChild(h('button', {
-        class: 'preset', style: 'background:' + p.hex, title: p.name,
-        onclick: function () { apply(p.hex); }
+        class: 'preset', style: 'background:' + css, title: css,
+        onclick: function () { apply(css); },
       }));
     });
-    return h('div', { class: 'field' }, [h('span', { class: 'lab', text: title }), row, presets]);
+
+    var rows = [h('span', { class: 'lab', text: title }), h('div', { class: 'color-row' }, [picker, hexInput]), presets];
+    if (onAccent) {
+      rows.push(this.segmented('', ['固定颜色', '主题色', '主题深色'], accent || '固定颜色', function (v) {
+        onAccent(v === '固定颜色' ? undefined : v);
+      }));
+    }
+    return h('div', { class: 'field' }, rows);
   };
-  App.prototype.accentPicker = function (title, value, onChange) {
-    return this.segmented(title, ['固定颜色', '主题色', '主题深色'], value || '固定颜色', function (v) {
-      onChange(v === '固定颜色' ? null : v);
+
+  /// 尺寸规则：撑满 / 包住 / 固定 pt / 父宽的比例。
+  App.prototype.sizeRule = function (title, rule, onChange, tag) {
+    var self = this;
+    var kind = rule === 'fill' ? 'fill' : rule === 'hug' || rule === undefined ? 'hug'
+      : typeof rule === 'number' ? 'fixed' : 'fraction';
+    var box = h('div', { class: 'field group' });
+    box.appendChild(this.segmented(title, [
+      { value: 'fill', label: '撑满' }, { value: 'hug', label: '包住' },
+      { value: 'fixed', label: '固定' }, { value: 'fraction', label: '比例' },
+    ], kind, function (next) {
+      if (next === 'fill') onChange('fill');
+      else if (next === 'hug') onChange('hug');
+      else if (next === 'fixed') onChange(120);
+      else onChange({ fraction: 0.5 });
+    }));
+    if (kind === 'fixed') {
+      box.appendChild(this.slider('', rule, LM.SIZE_RANGE[0], 600, 1, pt, function (v) {
+        onChange(v);
+      }, tag + ':fixed'));
+    } else if (kind === 'fraction') {
+      box.appendChild(this.slider('', rule.fraction, LM.FRACTION_RANGE[0], 1.5, 0.01, pct, function (v) {
+        onChange({ fraction: v });
+      }, tag + ':fraction'));
+    }
+    return box;
+  };
+
+  App.prototype.paddingControl = function (title, value, onChange, tag) {
+    var self = this;
+    var padding = value || LM.ZERO_PADDING;
+    var box = h('div', { class: 'field group' });
+    box.appendChild(h('span', { class: 'lab', text: title }));
+    var uniform = padding.top === padding.right && padding.right === padding.bottom && padding.bottom === padding.left;
+    box.appendChild(this.slider('四边', uniform ? padding.top : padding.top,
+      LM.PADDING_RANGE[0], 80, 1, pt, function (v) {
+        onChange({ top: v, right: v, bottom: v, left: v });
+      }, tag + ':all'));
+    var row = h('div', { class: 'row' });
+    [['上', 'top'], ['右', 'right'], ['下', 'bottom'], ['左', 'left']].forEach(function (pair) {
+      row.appendChild(h('label', { class: 'mini' }, [
+        h('span', { text: pair[0] }),
+        h('input', {
+          type: 'number', value: padding[pair[1]], min: 0, max: 200,
+          oninput: function () {
+            var next = Object.assign({}, padding);
+            next[pair[1]] = Number(this.value) || 0;
+            onChange(next);
+          },
+        }),
+      ]));
     });
+    box.appendChild(row);
+    return box;
+  };
+
+  App.prototype.disclosure = function (title, build) {
+    var self = this;
+    var box = h('div', { class: 'disclosure' + (this.more ? ' open' : '') });
+    box.appendChild(h('button', {
+      class: 'disclosure-head', text: (this.more ? '▾ ' : '▸ ') + title,
+      onclick: function () { self.more = !self.more; self.renderInspector(); },
+    }));
+    if (this.more) {
+      var body = h('div', { class: 'disclosure-body' });
+      build(body);
+      box.appendChild(body);
+    }
+    return box;
   };
 
   // MARK: - 检查器
 
-  App.prototype.buildInspector = function () {
+  App.prototype.renderInspector = function () {
     var box = document.getElementById('inspector');
-    box.innerHTML = '';
-    box.appendChild(h('div', { class: 'insp-title', text: this.selectionTitle() }));
-    if (this.selection === 'canvas') this.canvasInspector(box);
-    else if (this.selection === 'cover') this.coverInspector(box);
-    else {
-      var el = this.selectedElement();
-      if (!el) { this.selection = 'canvas'; this.canvasInspector(box); }
-      else if (LM.hasImage(el)) this.imageInspector(box, el);
-      else if (el.shape) this.shapeInspector(box, el);
-      else this.textInspector(box, el);
+    box.textContent = '';
+    var node = this.node();
+    if (!node) { this.canvasInspector(box); return; }
+    box.appendChild(this.toolbar(node));
+    if (LM.isStackNode(node)) this.stackInspector(box, node);
+    else if (LM.isTextNode(node)) this.textInspector(box, node);
+    else if (LM.isImageNode(node)) this.imageInspector(box, node);
+    else if (LM.isShapeNode(node)) this.shapeInspector(box, node);
+    else this.spacerInspector(box, node);
+    box.appendChild(this.layoutBlock(node));
+  };
+
+  /// 每个节点检查器的第一行：字形 + 图层名 …… 上移 / 下移 / 复制 / 删除。
+  App.prototype.toolbar = function (node) {
+    var self = this;
+    var root = this.isRoot(node.id);
+    var bar = h('div', { class: 'insp-title' }, [
+      h('span', { class: 'grow', text: this.layerTitle(node) }),
+    ]);
+    function button(label, title, disabled, action) {
+      return h('button', { class: 'icon-btn', text: label, title: title, disabled: disabled, onclick: action });
     }
+    bar.appendChild(button('↑', '上移（往后垫）', root, function () {
+      self.edit(null, function (draft) { draft.root = LM.moveNode(draft.root, node.id, 'up'); });
+    }));
+    bar.appendChild(button('↓', '下移（往前压）', root, function () {
+      self.edit(null, function (draft) { draft.root = LM.moveNode(draft.root, node.id, 'down'); });
+    }));
+    bar.appendChild(button('⧉', '复制', root, function () { self.duplicate(node); }));
+    bar.appendChild(button('␡', '删除', root, function () {
+      self.edit(null, function (draft) { draft.root = LM.removeNode(draft.root, node.id); });
+      self.selection = CANVAS;
+      self.refresh();
+    }));
+    return bar;
   };
 
   App.prototype.canvasInspector = function (box) {
-    var self = this, t = this.template;
-    box.appendChild(fieldBox('模版名称', h('input', {
-      type: 'text', value: t.name,
-      oninput: function () { var v = this.value; self.edit('name', function (x) { x.name = LM.prefix(v, 40); }); }
-    })));
+    var self = this;
+    var canvas = this.template.canvas;
+    box.appendChild(h('div', { class: 'insp-title' }, [h('span', { class: 'grow', text: '画布与底图' })]));
 
-    var chips = h('div', { class: 'chips' });
-    LM.ASPECT_PRESETS.forEach(function (p) {
-      chips.appendChild(h('button', {
-        class: 'chip' + (Math.abs(t.aspect - p[1]) < 0.005 ? ' on' : ''), text: p[0],
-        onclick: function () { self.edit(null, function (x) { x.aspect = LM.clamp(p[1], LM.ASPECT_RANGE, x.aspect); }); }
-      }));
-    });
-    if (t.imageData) {
-      chips.appendChild(h('button', {
-        class: 'chip', text: '跟随底图',
-        onclick: function () { self.fitAspectToImage(); }
+    box.appendChild(this.textInput('模版名', this.template.name, function (value) {
+      self.edit('name', function (draft) { draft.name = value; });
+    }));
+    box.appendChild(this.colorControl('底色', canvas.background, canvas.backgroundAccent,
+      function (color) { self.updateCanvas('bg', function (c) { c.background = color; }); },
+      function (accent) { self.updateCanvas(null, function (c) { c.backgroundAccent = accent; }); }));
+
+    // 底图
+    var image = canvas.image;
+    var imageRow = h('div', { class: 'row' });
+    imageRow.appendChild(h('button', {
+      class: 'btn small', text: image ? '更换底图' : '选择底图',
+      onclick: function () { global.app.pickCanvasImage(); },
+    }));
+    if (image) {
+      imageRow.appendChild(h('button', {
+        class: 'btn small', text: '移除',
+        onclick: function () { self.updateCanvas(null, function (c) { delete c.image; }); },
       }));
     }
-    box.appendChild(fieldBox('画布比例', chips));
-    box.appendChild(this.slider('高宽比', t.aspect, LM.ASPECT_RANGE[0], LM.ASPECT_RANGE[1], 0.01, ratio, function (v) {
-      self.edit('aspect', function (x) { x.aspect = v; });
-    }));
+    box.appendChild(fieldBox('底图', imageRow));
+    if (image) {
+      box.appendChild(this.slider('横向位置', image.focusX, 0, 1, 0.01, pct, function (v) {
+        self.updateCanvas('focusX', function (c) { c.image = Object.assign({}, c.image, { focusX: v }); });
+      }));
+      box.appendChild(this.slider('纵向位置', image.focusY, 0, 1, 0.01, pct, function (v) {
+        self.updateCanvas('focusY', function (c) { c.image = Object.assign({}, c.image, { focusY: v }); });
+      }));
+      box.appendChild(this.slider('缩放', image.zoom, LM.ZOOM_RANGE[0], LM.ZOOM_RANGE[1], 0.01, pct, function (v) {
+        self.updateCanvas('imgZoom', function (c) { c.image = Object.assign({}, c.image, { zoom: v }); });
+      }));
+      box.appendChild(this.slider('不透明度', image.opacity, LM.OPACITY_RANGE[0], 1, 0.01, pct, function (v) {
+        self.updateCanvas('imgOpacity', function (c) { c.image = Object.assign({}, c.image, { opacity: v }); });
+      }));
+    }
 
-    // 导出尺寸
-    var wInput = h('input', {
-      type: 'number', min: 540, max: 2160, step: 10, value: Math.round(LM.exportPixelWidth(t)),
-      onchange: function () {
-        var v = Number(this.value);
-        self.edit(null, function (x) { LM.setExportWidth(x, v); });
+    box.appendChild(this.paddingControl('内边距', canvas.padding, function (next) {
+      self.updateCanvas('canvasPad', function (c) { c.padding = next; });
+    }, 'canvasPad'));
+
+    box.appendChild(this.disclosure('更多', function (body) {
+      var fixed = typeof canvas.height === 'object';
+      body.appendChild(self.segmented('高度', [
+        { value: 'hug', label: '跟着内容' }, { value: 'aspect', label: '固定比例' },
+      ], fixed ? 'aspect' : 'hug', function (value) {
+        self.updateCanvas(null, function (c) { c.height = value === 'hug' ? 'hug' : { aspect: 1.3333333333333333 }; });
+      }));
+      if (fixed) {
+        var chips = h('div', { class: 'chips' });
+        LM.ASPECT_PRESETS.forEach(function (preset) {
+          chips.appendChild(h('button', {
+            class: 'chip' + (Math.abs(canvas.height.aspect - preset[1]) < 0.001 ? ' on' : ''),
+            text: preset[0],
+            onclick: function () { self.updateCanvas(null, function (c) { c.height = { aspect: preset[1] }; }); },
+          }));
+        });
+        body.appendChild(fieldBox('', chips));
+        body.appendChild(self.slider('比例', canvas.height.aspect,
+          LM.ASPECT_RANGE[0], LM.ASPECT_RANGE[1], 0.01, ratio, function (v) {
+            self.updateCanvas('aspect', function (c) { c.height = { aspect: v }; });
+          }));
       }
-    });
-    var hInput = h('input', {
-      type: 'number', min: 300, max: 4752, step: 10, value: Math.round(LM.exportPixelHeight(t)),
-      onchange: function () {
-        var v = Number(this.value);
-        self.edit(null, function (x) { LM.setExportHeight(x, v); });
-      }
-    });
-    box.appendChild(h('div', { class: 'field' }, [
-      h('span', { class: 'lab', text: '导出尺寸（px）' }),
-      h('div', { class: 'row' }, [wInput, h('span', { text: '×' }), hInput])
-    ]));
-    box.appendChild(this.toggle('锁定比例', LM.isAspectLocked(t), function (on) {
-      self.edit(null, function (x) { x.aspectLocked = on ? undefined : false; });
-    }));
-
-    box.appendChild(this.accentPicker('跟随主题色', t.backgroundAccent, function (v) {
-      self.edit(null, function (x) { x.backgroundAccent = v || undefined; });
-    }));
-    if (!t.backgroundAccent) {
-      box.appendChild(this.colorControl('底色', t.background, function (c) {
-        self.edit('bg', function (x) { x.background = c; });
-      }));
-    }
-
-    box.appendChild(h('div', { class: 'divider' }));
-    var actions = h('div', { class: 'actions' }, [
-      h('button', { class: 'btn small', text: t.imageData ? '更换底图' : '选择底图', onclick: function () { self.pickBaseImage(); } })
-    ]);
-    if (t.imageData) actions.appendChild(h('button', {
-      class: 'btn small danger', text: '移除底图',
-      onclick: function () { self.edit(null, function (x) { x.imageData = undefined; }); }
-    }));
-    box.appendChild(fieldBox('底图', actions));
-    if (t.imageData) {
-      box.appendChild(this.slider('缩放', t.imageScale, 0.5, 3, 0.01, pct, function (v) { self.edit('is', function (x) { x.imageScale = v; }); }));
-      box.appendChild(this.slider('横向位置', t.imageOffsetX, -1, 1, 0.005, signedPct, function (v) { self.edit('ix', function (x) { x.imageOffsetX = v; }); }));
-      box.appendChild(this.slider('纵向位置', t.imageOffsetY, -1, 1, 0.005, signedPct, function (v) { self.edit('iy', function (x) { x.imageOffsetY = v; }); }));
-      box.appendChild(this.slider('不透明度', t.imageOpacity, 0, 1, 0.01, pct, function (v) { self.edit('io', function (x) { x.imageOpacity = v; }); }));
-    }
-
-    box.appendChild(h('div', { class: 'divider' }));
-    box.appendChild(this.toggle('封面图层', t.cover.visible, function (on) {
-      self.edit(null, function (x) { x.cover.visible = on; });
-    }));
-
-    box.appendChild(h('div', { class: 'divider' }));
-    var starters = h('div', { class: 'chips' });
-    LM.STARTERS.forEach(function (s) {
-      starters.appendChild(h('button', {
-        class: 'chip', text: s.id, title: s.subtitle,
-        onclick: function () { self.applyStarter(s.id); }
-      }));
-    });
-    box.appendChild(fieldBox('起始排版', starters));
-    if (this.starterUndoShown()) {
-      var undo = this.starterUndo;
-      box.appendChild(h('div', { class: 'actions' }, [
-        h('span', { class: 'hint', text: '已套用「' + undo.name + '」' }),
-        h('button', { class: 'btn small', text: '撤销', onclick: function () { self.undoStarter(); } })
-      ]));
-    }
-  };
-
-  App.prototype.starterUndoShown = function () {
-    var u = this.starterUndo;
-    if (!u) return false;
-    var t = this.template;
-    return JSON.stringify(t.cover) === u.cover && JSON.stringify(t.elements) === u.elements &&
-      JSON.stringify(t.background) === u.background && t.aspect === u.aspect;
-  };
-  App.prototype.applyStarter = function (kind) {
-    var fresh = LM.starter(kind);
-    var before = JSON.parse(this.snapshot());
-    this.pushUndo(null);
-    var t = this.template;
-    t.cover = fresh.cover;
-    t.elements = fresh.elements;
-    if (!t.imageData) { t.background = fresh.background; t.aspect = fresh.aspect; }
-    this.selection = 'canvas';
-    this.starterUndo = {
-      name: kind, before: before,
-      cover: JSON.stringify(t.cover), elements: JSON.stringify(t.elements),
-      background: JSON.stringify(t.background), aspect: t.aspect
-    };
-    this.refresh();
-  };
-  App.prototype.undoStarter = function () {
-    var u = this.starterUndo;
-    if (!u) return;
-    var t = this.template;
-    t.cover = u.before.cover; t.elements = u.before.elements;
-    t.background = u.before.background; t.aspect = u.before.aspect;
-    this.starterUndo = null;
-    this.selection = 'canvas';
-    this.refresh();
-  };
-  App.prototype.fitAspectToImage = function () {
-    var self = this;
-    var img = this.images.get('base:' + this.template.id, this.template.imageData);
-    if (!img) { this.toast('底图还在读取'); return; }
-    this.edit(null, function (x) {
-      x.aspect = LM.clamp(img.naturalHeight / img.naturalWidth, LM.ASPECT_RANGE, x.aspect);
-    });
-  };
-
-  App.prototype.coverInspector = function (box) {
-    var self = this, c = this.template.cover;
-    box.appendChild(this.toggle('封面图层', c.visible, function (on) {
-      self.edit(null, function (x) { x.cover.visible = on; });
-    }));
-    function s(title, key, min, max, step, format, tag) {
-      box.appendChild(self.slider(title, c[key], min, max, step, format, function (v) {
-        self.edit(tag, function (x) { x.cover[key] = v; });
-      }));
-    }
-    s('横向位置', 'x', -0.5, 1.5, 0.005, pct, 'cx');
-    s('纵向位置', 'y', -0.5, 1.5, 0.005, pct, 'cy');
-    s('宽度', 'width', 0.05, 2, 0.005, pct, 'cw');
-    s('高度', 'height', 0.05, 2, 0.005, pct, 'ch');
-    s('圆角', 'cornerRadius', 0, 200, 1, pt, 'cr');
-    s('旋转', 'rotation', -180, 180, 0.5, deg, 'crot');
-    s('白边', 'border', 0, 40, 1, pt, 'cb');
-    s('不透明度', 'opacity', 0.05, 1, 0.01, pct, 'co');
-    box.appendChild(this.toggle('投影', c.shadow, function (on) {
-      self.edit(null, function (x) { x.cover.shadow = on; });
-    }));
-
-    var split = LM.coverSplit(this.template), count = this.template.elements.length;
-    box.appendChild(h('div', { class: 'actions' }, [
-      h('button', {
-        class: 'btn small', text: '上移一层', disabled: split >= count,
-        onclick: function () { self.edit(null, function (x) { x.cover.layer = Math.min(x.elements.length, LM.coverSplit(x) + 1); }); }
-      }),
-      h('button', {
-        class: 'btn small', text: '下移一层', disabled: split === 0,
-        onclick: function () { self.edit(null, function (x) { x.cover.layer = Math.max(0, LM.coverSplit(x) - 1); }); }
-      })
-    ]));
-
-    box.appendChild(h('div', { class: 'divider' }));
-    box.appendChild(h('span', { class: 'lab', text: '框内位置' }));
-    function p(title, key, min, max, step, format, tag) {
-      box.appendChild(self.slider(title, c.content[key], min, max, step, format, function (v) {
-        self.edit(tag, function (x) { x.cover.content[key] = v; });
-      }));
-    }
-    p('缩放', 'scale', 0.5, 3, 0.01, pct, 'ps');
-    p('横向偏移', 'offsetX', -1, 1, 0.005, signedPct, 'px');
-    p('纵向偏移', 'offsetY', -1, 1, 0.005, signedPct, 'py');
-    p('倾斜', 'rotation', -45, 45, 0.5, deg, 'pr');
-    box.appendChild(h('div', { class: 'actions' }, [
-      h('button', {
-        class: 'btn small', text: '铺满画布',
-        onclick: function () {
-          self.edit(null, function (x) {
-            x.cover.x = 0.5; x.cover.y = 0.5; x.cover.width = 1; x.cover.height = 1;
-            x.cover.cornerRadius = 0; x.cover.rotation = 0;
-          });
-        }
-      }),
-      h('button', {
-        class: 'btn small', text: '重置',
-        onclick: function () { self.edit(null, function (x) { x.cover.content = LM.defaultPlacement(); }); }
-      })
-    ]));
-  };
-
-  App.prototype.elementActions = function (box, el) {
-    var self = this;
-    var index = this.template.elements.indexOf(el);
-    box.appendChild(h('div', { class: 'divider' }));
-    box.appendChild(h('div', { class: 'actions' }, [
-      h('button', { class: 'btn small', text: '复制', disabled: this.template.elements.length >= LM.MAX_ELEMENTS, onclick: function () { self.duplicate(el.id); } }),
-      h('button', {
-        class: 'btn small', text: '上移', disabled: index >= this.template.elements.length - 1,
-        onclick: function () { self.reorder(el.id, 1); }
-      }),
-      h('button', {
-        class: 'btn small', text: '下移', disabled: index <= 0,
-        onclick: function () { self.reorder(el.id, -1); }
-      }),
-      h('button', { class: 'btn small danger', text: '删除', onclick: function () { self.remove(el.id); } })
-    ]));
-  };
-
-  App.prototype.textInspector = function (box, el) {
-    var self = this;
-    function change(tag, fn) { self.edit(tag, function () { fn(el); }); }
-
-    box.appendChild(this.groupedFieldSelect('内容', el.field, function (v) { change(null, function (e) { e.field = v; }); }));
-    if (LM.fieldInfo(el.field).priv) box.appendChild(h('div', { class: 'hint', text: '🔒 私人信息 · 由分享开关控制' }));
-    if (el.field === '自定义文字') {
-      box.appendChild(fieldBox('自定义文字', h('textarea', {
-        value: el.text, oninput: function () { var v = this.value; change('text', function (e) { e.text = LM.prefix(v, 300); }); }
-      })));
-    }
-    box.appendChild(fieldBox('小标题（如 DATE）', h('input', {
-      type: 'text', value: el.label,
-      oninput: function () { var v = this.value; change('label', function (e) { e.label = LM.prefix(v, 40); }); },
-      onchange: function () { self.buildInspector(); }
-    })));
-    if (el.label) {
-      box.appendChild(this.toggle('小标题同一行', el.inlineLabel === true, function (on) {
-        change(null, function (e) { e.inlineLabel = on ? true : undefined; });
-      }));
-    }
-    box.appendChild(this.slider('字号', el.fontSize, 6, 120, 0.5, one, function (v) { change('fs', function (e) { e.fontSize = v; }); }));
-    box.appendChild(this.select('字重', LM.WEIGHTS, el.weight, function (v) { change(null, function (e) { e.weight = v; }); }));
-    box.appendChild(this.select('字体', LM.DESIGNS, el.design, function (v) { change(null, function (e) { e.design = v; }); }));
-    box.appendChild(this.segmented('对齐', LM.ALIGNMENTS, el.alignment, function (v) { change(null, function (e) { e.alignment = v; }); }));
-    box.appendChild(this.accentPicker('跟随主题色', el.accent, function (v) { change(null, function (e) { e.accent = v || undefined; }); }));
-    if (!el.accent) {
-      box.appendChild(this.colorControl('文字颜色', el.color, function (c) { change('col', function (e) { e.color = c; }); },
-        [LM.contrasting(this.template.background)]));
-    }
-    box.appendChild(this.slider('宽度', el.width, 0.1, 1.5, 0.005, pct, function (v) { change('w', function (e) { e.width = v; }); }));
-    box.appendChild(this.slider('字距', el.tracking, -2, 12, 0.1, one, function (v) { change('tr', function (e) { e.tracking = v; }); }));
-    box.appendChild(this.slider('旋转', el.rotation, -180, 180, 0.5, deg, function (v) { change('rot', function (e) { e.rotation = v; }); }));
-    box.appendChild(this.slider('不透明度', el.opacity, 0.05, 1, 0.01, pct, function (v) { change('op', function (e) { e.opacity = v; }); }));
-    box.appendChild(this.slider('行数', el.lineLimit, 1, 20, 1, pt, function (v) { change('ll', function (e) { e.lineLimit = Math.round(v); }); }));
-    box.appendChild(this.toggle('英文大写', el.uppercase, function (on) { change(null, function (e) { e.uppercase = on; }); }));
-    box.appendChild(this.toggle('底色标签', !!(el.chip || el.chipAccent), function (on) {
-      change(null, function (e) {
-        e.chip = on ? LM.contrasting(e.color) : undefined;
-        if (!on) e.chipAccent = undefined;
+      var widthChips = h('div', { class: 'chips' });
+      var current = canvas.exportWidth || LM.DEFAULT_EXPORT_WIDTH;
+      LM.EXPORT_WIDTH_PRESETS.forEach(function (width) {
+        widthChips.appendChild(h('button', {
+          class: 'chip' + (current === width ? ' on' : ''), text: width + ' px',
+          onclick: function () { self.updateCanvas(null, function (c) { c.exportWidth = width; }); },
+        }));
       });
+      body.appendChild(fieldBox('导出宽度', widthChips));
+      body.appendChild(h('div', { class: 'hint', text: '高度永远跟着排版走，不用设。' }));
     }));
-    if (el.chip || el.chipAccent) {
-      box.appendChild(this.accentPicker('标签跟随主题色', el.chipAccent, function (v) {
-        change(null, function (e) {
-          e.chipAccent = v || undefined;
-          if (v) e.chip = undefined; else if (!e.chip) e.chip = LM.contrasting(e.color);
+  };
+
+  App.prototype.stackInspector = function (box, node) {
+    var self = this;
+    box.appendChild(this.colorControl('底色', node.fill || LM.Palette.white, node.fillAccent,
+      function (color) { self.updateSelected('fill', function (n) { n.fill = color; }); },
+      function (accent) { self.updateSelected(null, function (n) { n.fillAccent = accent; }); }));
+    if (node.fill) {
+      box.appendChild(h('button', {
+        class: 'btn small', text: '去掉底色',
+        onclick: function () { self.updateSelected(null, function (n) { delete n.fill; delete n.fillAccent; }); },
+      }));
+    }
+    box.appendChild(this.slider('间距', node.gap || 0, LM.GAP_RANGE[0], 60, 1, pt, function (v) {
+      self.updateSelected('gap', function (n) { n.gap = v; });
+    }));
+    box.appendChild(this.paddingControl('内边距', node.padding, function (next) {
+      self.updateSelected('pad', function (n) { n.padding = next; });
+    }, 'pad'));
+    box.appendChild(this.slider('圆角', node.cornerRadius || 0,
+      LM.CORNER_RADIUS_RANGE[0], 80, 1, pt, function (v) {
+        self.updateSelected('radius', function (n) { n.cornerRadius = v; });
+      }));
+
+    box.appendChild(this.disclosure('更多', function (body) {
+      body.appendChild(self.segmented('方向', [
+        { value: 'column', label: '列' }, { value: 'row', label: '行' },
+      ], node.direction, function (value) {
+        self.updateSelected(null, function (n) { n.direction = value; });
+      }));
+      body.appendChild(self.segmented('交叉轴对齐', [
+        { value: 'start', label: '首' }, { value: 'center', label: '中' },
+        { value: 'end', label: '尾' }, { value: 'stretch', label: '拉伸' },
+      ], node.align || 'stretch', function (value) {
+        self.updateSelected(null, function (n) { n.align = value; });
+      }));
+      body.appendChild(self.select('主轴分布', [
+        { value: 'start', label: '靠首' }, { value: 'center', label: '居中' },
+        { value: 'end', label: '靠尾' }, { value: 'spaceBetween', label: '两端对齐' },
+        { value: 'spaceAround', label: '环绕均分' }, { value: 'spaceEvenly', label: '完全均分' },
+      ], node.justify || 'start', function (value) {
+        self.updateSelected(null, function (n) { n.justify = value; });
+      }));
+      var stroke = node.stroke;
+      body.appendChild(self.toggle('描边', !!stroke, function (on) {
+        self.updateSelected(null, function (n) {
+          if (on) n.stroke = { width: 1, color: LM.Palette.ink, dashLength: 0, dashGap: 0 };
+          else delete n.stroke;
         });
       }));
-      if (!el.chipAccent) {
-        box.appendChild(this.colorControl('标签底色', el.chip || LM.INK, function (c) { change('chip', function (e) { e.chip = c; }); }));
+      if (stroke) {
+        body.appendChild(self.slider('线宽', stroke.width, 0.5, LM.STROKE_RANGE[1], 0.5, function (v) {
+          return v.toFixed(1) + ' pt';
+        }, function (v) {
+          self.updateSelected('strokeW', function (n) { n.stroke = Object.assign({}, n.stroke, { width: v }); });
+        }));
+        body.appendChild(self.colorControl('描边色', stroke.color, stroke.accent,
+          function (color) {
+            self.updateSelected('strokeC', function (n) { n.stroke = Object.assign({}, n.stroke, { color: color }); });
+          },
+          function (accent) {
+            self.updateSelected(null, function (n) { n.stroke = Object.assign({}, n.stroke, { accent: accent }); });
+          }));
+        body.appendChild(self.slider('虚线段', stroke.dashLength || 0, 0, LM.DASH_RANGE[1], 1, pt, function (v) {
+          self.updateSelected('dashL', function (n) { n.stroke = Object.assign({}, n.stroke, { dashLength: v }); });
+        }));
+        body.appendChild(self.slider('虚线间隔', stroke.dashGap || 0, 0, LM.DASH_RANGE[1], 1, pt, function (v) {
+          self.updateSelected('dashG', function (n) { n.stroke = Object.assign({}, n.stroke, { dashGap: v }); });
+        }));
       }
-    }
-    this.elementActions(box, el);
+      body.appendChild(self.toggle('超出裁掉', node.clip === true, function (on) {
+        self.updateSelected(null, function (n) { n.clip = on; });
+      }));
+      body.appendChild(self.toggle('空时收起', node.collapseWhenEmpty !== false, function (on) {
+        self.updateSelected(null, function (n) { n.collapseWhenEmpty = on; });
+      }));
+    }));
   };
 
-  App.prototype.imageInspector = function (box, el) {
+  App.prototype.textInspector = function (box, node) {
     var self = this;
-    function change(tag, fn) { self.edit(tag, function () { fn(el); }); }
-    var sticker = el.isSticker === true;
-    box.appendChild(h('div', { class: 'actions' }, [
-      h('button', {
-        class: 'btn small', text: sticker ? '换贴纸' : '换图片',
-        onclick: function () { if (sticker) self.openStickerPicker(el.id); else self.pickElementImage(el.id); }
-      })
-    ]));
-    if (LM.isLivePhoto(el)) box.appendChild(h('div', { class: 'hint', text: '实况照片 · 鼠标悬停播放' }));
-    box.appendChild(this.slider('横向位置', el.x, -0.5, 1.5, 0.005, pct, function (v) { change('ex', function (e) { e.x = v; }); }));
-    box.appendChild(this.slider('纵向位置', el.y, -0.5, 1.5, 0.005, pct, function (v) { change('ey', function (e) { e.y = v; }); }));
-    box.appendChild(this.slider('宽度', el.width, 0.1, 1.5, 0.005, pct, function (v) { change('ew', function (e) { e.width = v; }); }));
-
-    var framed = typeof el.imageFrameAspect === 'number';
-    box.appendChild(this.slider('框高', framed ? el.imageFrameAspect : (el.imageAspect || 1), 0.1, 3, 0.01, ratio, function (v) {
-      change('efa', function (e) {
-        e.imageFrameAspect = v;
-        if (!e.imagePlacement) e.imagePlacement = LM.defaultPlacement();
+    box.appendChild(this.fieldSelect('字段', node.field, function (value) {
+      self.updateSelected(null, function (n) {
+        n.field = value;
+        n.fontSize = LM.suggestedSize(value);
+        n.weight = LM.suggestedWeight(value);
+        n.design = LM.suggestedDesign(value);
       });
     }));
-    if (framed) {
-      var p = el.imagePlacement || LM.defaultPlacement();
-      box.appendChild(h('span', { class: 'lab', text: '框内位置' }));
-      box.appendChild(this.slider('缩放', p.scale, 0.5, 3, 0.01, pct, function (v) { change('ips', function (e) { e.imagePlacement.scale = v; }); }));
-      box.appendChild(this.slider('横向偏移', p.offsetX, -1, 1, 0.005, signedPct, function (v) { change('ipx', function (e) { e.imagePlacement.offsetX = v; }); }));
-      box.appendChild(this.slider('纵向偏移', p.offsetY, -1, 1, 0.005, signedPct, function (v) { change('ipy', function (e) { e.imagePlacement.offsetY = v; }); }));
-      box.appendChild(this.slider('倾斜', p.rotation, -45, 45, 0.5, deg, function (v) { change('ipr', function (e) { e.imagePlacement.rotation = v; }); }));
-      box.appendChild(h('div', { class: 'actions' }, [
-        h('button', {
-          class: 'btn small', text: '按图片',
-          onclick: function () { change(null, function (e) { e.imageFrameAspect = undefined; e.imagePlacement = undefined; }); }
-        })
-      ]));
+    if (node.field === '自定义文字') {
+      box.appendChild(this.textInput('内容', node.text, function (value) {
+        self.updateSelected('text', function (n) { n.text = value; });
+      }, true));
     }
-    box.appendChild(this.slider('旋转', el.rotation, -180, 180, 0.5, deg, function (v) { change('erot', function (e) { e.rotation = v; }); }));
-    box.appendChild(this.slider('不透明度', el.opacity, 0.05, 1, 0.01, pct, function (v) { change('eop', function (e) { e.opacity = v; }); }));
-    this.elementActions(box, el);
+    box.appendChild(this.slider('字号', node.fontSize,
+      LM.FONT_SIZE_RANGE[0], LM.FONT_SIZE_RANGE[1], 0.5, function (v) { return v.toFixed(1) + ' pt'; },
+      function (v) { self.updateSelected('size', function (n) { n.fontSize = v; }); }));
+    box.appendChild(this.segmented('字重', LM.TEMPLATE_WEIGHTS, node.weight, function (value) {
+      self.updateSelected(null, function (n) { n.weight = value; });
+    }));
+    box.appendChild(this.segmented('对齐', LM.TEMPLATE_ALIGNMENTS, node.alignment, function (value) {
+      self.updateSelected(null, function (n) { n.alignment = value; });
+    }));
+    box.appendChild(this.colorControl('颜色', node.color, node.accent,
+      function (color) { self.updateSelected('color', function (n) { n.color = color; }); },
+      function (accent) { self.updateSelected(null, function (n) { n.accent = accent; }); }));
+
+    box.appendChild(this.disclosure('更多', function (body) {
+      body.appendChild(self.segmented('字体', LM.TEMPLATE_FONT_DESIGNS, node.design, function (value) {
+        self.updateSelected(null, function (n) { n.design = value; });
+      }));
+      body.appendChild(self.textInput('小标题', node.label, function (value) {
+        self.updateSelected('label', function (n) { n.label = value; });
+      }));
+      body.appendChild(self.toggle('小票行（标签左、值右）', node.inlineLabel === true, function (on) {
+        self.updateSelected(null, function (n) { n.inlineLabel = on; });
+      }));
+      body.appendChild(self.slider('字距', node.tracking, LM.TRACKING_RANGE[0], LM.TRACKING_RANGE[1], 0.1,
+        function (v) { return v.toFixed(1); },
+        function (v) { self.updateSelected('tracking', function (n) { n.tracking = v; }); }));
+      body.appendChild(self.slider('行数上限', node.lineLimit,
+        LM.LINE_LIMIT_RANGE[0], LM.LINE_LIMIT_RANGE[1], 1, String,
+        function (v) { self.updateSelected('lines', function (n) { n.lineLimit = v; }); }));
+      body.appendChild(self.toggle('全大写', node.uppercase === true, function (on) {
+        self.updateSelected(null, function (n) { n.uppercase = on; });
+      }));
+      body.appendChild(self.toggle('芯片底色', !!node.chip, function (on) {
+        self.updateSelected(null, function (n) {
+          if (on) n.chip = LM.Palette.cream; else { delete n.chip; delete n.chipAccent; }
+        });
+      }));
+      if (node.chip) {
+        body.appendChild(self.colorControl('芯片色', node.chip, node.chipAccent,
+          function (color) { self.updateSelected('chip', function (n) { n.chip = color; }); },
+          function (accent) { self.updateSelected(null, function (n) { n.chipAccent = accent; }); }));
+      }
+      body.appendChild(self.toggle('没值时收起', node.hideWhenEmpty !== false, function (on) {
+        self.updateSelected(null, function (n) { n.hideWhenEmpty = on; });
+      }));
+    }));
   };
 
-  App.prototype.shapeInspector = function (box, el) {
+  App.prototype.imageInspector = function (box, node) {
     var self = this;
-    function change(tag, fn) { self.edit(tag, function () { fn(el); }); }
-    var shape = el.shape;
-    box.appendChild(this.select('形状', LM.SHAPES, shape, function (v) { change(null, function (e) { e.shape = v; }); }));
-    box.appendChild(this.accentPicker('跟随主题色', el.accent, function (v) { change(null, function (e) { e.accent = v || undefined; }); }));
-    if (!el.accent) {
-      box.appendChild(this.colorControl('颜色', el.color, function (c) { change('scol', function (e) { e.color = c; }); },
-        [LM.contrasting(this.template.background)]));
+    var row = h('div', { class: 'row' });
+    row.appendChild(h('button', {
+      class: 'btn small', text: '换图',
+      onclick: function () { global.app.pickImage(node.id); },
+    }));
+    row.appendChild(h('button', {
+      class: 'btn small', text: '换贴纸',
+      onclick: function () { global.app.pickSticker(node.id); },
+    }));
+    if (node.source !== 'cover') {
+      row.appendChild(h('button', {
+        class: 'btn small', text: '用记录封面',
+        onclick: function () {
+          self.updateSelected(null, function (n) {
+            n.source = 'cover';
+            delete n.video;
+            delete n.imageAspect;
+            n.isSticker = false;
+          });
+        },
+      }));
     }
-    box.appendChild(this.slider('横向位置', el.x, -0.5, 1.5, 0.005, pct, function (v) { change('sx', function (e) { e.x = v; }); }));
-    box.appendChild(this.slider('纵向位置', el.y, -0.5, 1.5, 0.005, pct, function (v) { change('sy', function (e) { e.y = v; }); }));
-    box.appendChild(this.slider('宽度', el.width, 0.02, 1.5, 0.005, pct, function (v) { change('sw', function (e) { e.width = v; }); }));
-    box.appendChild(this.slider('高度', el.shapeHeight === undefined ? 0.1 : el.shapeHeight, 0.002, 3, 0.002, pct, function (v) { change('sh', function (e) { e.shapeHeight = v; }); }));
-    if (['矩形', '胶片孔'].indexOf(shape) >= 0) {
-      box.appendChild(this.slider('圆角', el.cornerRadius || 0, 0, 200, 1, pt, function (v) { change('scr', function (e) { e.cornerRadius = v; }); }));
+    box.appendChild(fieldBox('图片', row));
+
+    var chips = h('div', { class: 'chips' });
+    LM.IMAGE_ASPECT_PRESETS.forEach(function (preset) {
+      var on = preset[1] === 'natural' ? node.aspect === 'natural'
+        : typeof node.aspect === 'number' && Math.abs(node.aspect - preset[1]) < 0.001;
+      chips.appendChild(h('button', {
+        class: 'chip' + (on ? ' on' : ''), text: preset[0],
+        onclick: function () { self.updateSelected(null, function (n) { n.aspect = preset[1]; }); },
+      }));
+    });
+    box.appendChild(fieldBox('框比例', chips));
+    if (typeof node.aspect === 'number') {
+      box.appendChild(this.slider('', node.aspect, 0.3, 2.5, 0.01, ratio, function (v) {
+        self.updateSelected('aspect', function (n) { n.aspect = v; });
+      }));
     }
-    if (['矩形', '圆形', '直线', '唱片纹', '点阵'].indexOf(shape) >= 0) {
-      box.appendChild(this.slider('线宽', el.strokeWidth || 0, 0, 40, 0.5, one, function (v) { change('ss', function (e) { e.strokeWidth = v; }); }));
+    box.appendChild(this.slider('缩放', node.zoom, LM.ZOOM_RANGE[0], LM.ZOOM_RANGE[1], 0.01, pct, function (v) {
+      self.updateSelected('zoom', function (n) { n.zoom = v; });
+    }));
+    box.appendChild(this.slider('圆角', node.cornerRadius || 0,
+      LM.CORNER_RADIUS_RANGE[0], 200, 1, pt, function (v) {
+        self.updateSelected('radius', function (n) { n.cornerRadius = v; });
+      }));
+    box.appendChild(h('div', { class: 'hint', text: '在画布上拖这张图 = 调「露出哪一段」。' }));
+
+    box.appendChild(this.disclosure('更多', function (body) {
+      body.appendChild(self.segmented('填充方式', [
+        { value: 'cover', label: '裁满' }, { value: 'contain', label: '完整' },
+      ], node.fit || 'cover', function (value) {
+        self.updateSelected(null, function (n) { n.fit = value; });
+      }));
+      body.appendChild(self.slider('横向位置', node.focusX, 0, 1, 0.01, pct, function (v) {
+        self.updateSelected('focusX', function (n) { n.focusX = v; });
+      }));
+      body.appendChild(self.slider('纵向位置', node.focusY, 0, 1, 0.01, pct, function (v) {
+        self.updateSelected('focusY', function (n) { n.focusY = v; });
+      }));
+      body.appendChild(self.slider('倾斜', node.tilt, LM.TILT_RANGE[0], LM.TILT_RANGE[1], 0.5, deg, function (v) {
+        self.updateSelected('tilt', function (n) { n.tilt = v; });
+      }));
+      body.appendChild(self.slider('白边', node.border || 0, LM.BORDER_RANGE[0], LM.BORDER_RANGE[1], 1, pt,
+        function (v) { self.updateSelected('border', function (n) { n.border = v; }); }));
+      body.appendChild(self.toggle('投影', node.shadow === true, function (on) {
+        self.updateSelected(null, function (n) { n.shadow = on; });
+      }));
+      if (LM.nodeIsLivePhoto(node)) {
+        body.appendChild(h('div', { class: 'hint', text: '这一层带实况视频；鼠标停上去会静音播放。' }));
+        body.appendChild(h('button', {
+          class: 'btn small', text: '去掉实况',
+          onclick: function () { self.updateSelected(null, function (n) { delete n.video; }); },
+        }));
+      } else {
+        body.appendChild(h('button', {
+          class: 'btn small', text: '加一段实况视频',
+          onclick: function () { global.app.pickLiveVideo(node.id); },
+        }));
+      }
+    }));
+  };
+
+  App.prototype.shapeInspector = function (box, node) {
+    var self = this;
+    box.appendChild(this.select('形状', LM.TEMPLATE_SHAPES, node.shape, function (value) {
+      self.updateSelected(null, function (n) {
+        n.shape = value;
+        n.height = LM.defaultShapeHeight(value);
+      });
+    }));
+    box.appendChild(this.colorControl('颜色', node.color, node.accent,
+      function (color) { self.updateSelected('color', function (n) { n.color = color; }); },
+      function (accent) { self.updateSelected(null, function (n) { n.accent = accent; }); }));
+    box.appendChild(this.slider('高度', typeof node.height === 'number' ? node.height : 40,
+      1, 400, 1, pt, function (v) {
+        self.updateSelected('height', function (n) { n.height = v; });
+      }));
+
+    box.appendChild(this.disclosure('更多', function (body) {
+      body.appendChild(self.slider('线宽', node.strokeWidth || 0,
+        LM.STROKE_RANGE[0], LM.STROKE_RANGE[1], 0.5, function (v) { return v.toFixed(1) + ' pt'; },
+        function (v) { self.updateSelected('stroke', function (n) { n.strokeWidth = v; }); }));
+      body.appendChild(self.slider('圆角', node.cornerRadius || 0,
+        LM.CORNER_RADIUS_RANGE[0], 80, 1, pt, function (v) {
+          self.updateSelected('radius', function (n) { n.cornerRadius = v; });
+        }));
+      body.appendChild(self.slider('虚线段 / 齿长', node.dashLength || 0, 0, LM.DASH_RANGE[1], 1, pt, function (v) {
+        self.updateSelected('dashL', function (n) { n.dashLength = v; });
+      }));
+      body.appendChild(self.slider('虚线间隔 / 疏密', node.dashGap || 0, 0, LM.DASH_RANGE[1], 1, pt, function (v) {
+        self.updateSelected('dashG', function (n) { n.dashGap = v; });
+      }));
+      body.appendChild(h('div', { class: 'hint', text: '唱片纹 / 点阵 / 胶片孔 / 锯齿边用这两根滑杆调疏密与大小。' }));
+    }));
+  };
+
+  App.prototype.spacerInspector = function (box) {
+    box.appendChild(h('div', { class: 'hint', text: '间隔：把剩下的空间占掉。画布是「固定比例」时才撑得开，跟着内容时它等于 0。' }));
+  };
+
+  /// 所有节点共用的「布局」块。
+  App.prototype.layoutBlock = function (node) {
+    var self = this;
+    var box = h('div', { class: 'panel' });
+    box.appendChild(h('div', { class: 'section-title', text: '布局' }));
+    if (this.isRoot(node.id)) {
+      box.appendChild(h('div', { class: 'hint', text: '这是根容器：宽永远撑满，高跟着画布。' }));
     }
-    var lengthTitle = shape === '胶片孔' ? '孔宽' : (shape === '锯齿边' ? '齿距' : '虚线段长');
-    var gapTitle = ['唱片纹', '点阵'].indexOf(shape) >= 0 ? '间距' : '虚线间隔';
-    if (['矩形', '圆形', '直线', '胶片孔', '锯齿边'].indexOf(shape) >= 0) {
-      box.appendChild(this.slider(lengthTitle, el.dashLength || 0, 0, 80, 0.5, one, function (v) { change('sdl', function (e) { e.dashLength = v; }); }));
+    box.appendChild(this.sizeRule('宽', node.width, function (rule) {
+      self.updateSelected(null, function (n) { n.width = rule; });
+    }, 'w'));
+    box.appendChild(this.sizeRule('高', node.height, function (rule) {
+      self.updateSelected(null, function (n) { n.height = rule; });
+    }, 'h'));
+
+    var absolute = node.position === 'absolute';
+    box.appendChild(this.segmented('位置', [
+      { value: 'flow', label: '自动布局' }, { value: 'absolute', label: '绝对定位' },
+    ], absolute ? 'absolute' : 'flow', function (value) {
+      self.updateSelected(null, function (n) { n.position = value; });
+    }));
+    if (absolute) {
+      var grid = h('div', { class: 'anchors' });
+      LM.ANCHORS.forEach(function (anchor) {
+        grid.appendChild(h('button', {
+          class: 'anchor' + ((node.anchor || 'center') === anchor ? ' on' : ''),
+          title: anchor, text: '•',
+          onclick: function () { self.updateSelected(null, function (n) { n.anchor = anchor; }); },
+        }));
+      });
+      box.appendChild(fieldBox('锚点', grid));
+      box.appendChild(this.slider('横向位移', node.offsetX || 0, -200, 200, 1, pt, function (v) {
+        self.updateSelected('offX', function (n) { n.offsetX = v; });
+      }));
+      box.appendChild(this.slider('纵向位移', node.offsetY || 0, -200, 200, 1, pt, function (v) {
+        self.updateSelected('offY', function (n) { n.offsetY = v; });
+      }));
     }
-    if (['矩形', '圆形', '直线', '胶片孔', '唱片纹', '点阵'].indexOf(shape) >= 0) {
-      box.appendChild(this.slider(gapTitle, el.dashGap || 0, 0, 80, 0.5, one, function (v) { change('sdg', function (e) { e.dashGap = v; }); }));
+
+    if (!this.isRoot(node.id)) {
+      var actions = h('div', { class: 'row' });
+      actions.appendChild(h('button', {
+        class: 'btn small', text: '装进列',
+        onclick: function () {
+          self.edit(null, function (draft) { draft.root = LM.wrapNode(draft.root, node.id, 'column'); });
+        },
+      }));
+      actions.appendChild(h('button', {
+        class: 'btn small', text: '装进行',
+        onclick: function () {
+          self.edit(null, function (draft) { draft.root = LM.wrapNode(draft.root, node.id, 'row'); });
+        },
+      }));
+      actions.appendChild(h('button', {
+        class: 'btn small', text: '移出到父级',
+        onclick: function () {
+          self.edit(null, function (draft) { draft.root = LM.unwrapNode(draft.root, node.id); });
+        },
+      }));
+      box.appendChild(actions);
     }
-    box.appendChild(this.slider('旋转', el.rotation, -180, 180, 0.5, deg, function (v) { change('srot', function (e) { e.rotation = v; }); }));
-    box.appendChild(this.slider('不透明度', el.opacity, 0.05, 1, 0.01, pct, function (v) { change('sop', function (e) { e.opacity = v; }); }));
-    this.elementActions(box, el);
+
+    box.appendChild(this.slider('旋转', node.rotation || 0, -45, 45, 0.5, deg, function (v) {
+      self.updateSelected('rotation', function (n) { n.rotation = v; });
+    }));
+    box.appendChild(this.slider('不透明度', node.opacity === undefined ? 1 : node.opacity,
+      LM.OPACITY_RANGE[0], 1, 0.01, pct, function (v) {
+        self.updateSelected('opacity', function (n) { n.opacity = v; });
+      }));
+    box.appendChild(this.toggle('显示', node.visible !== false, function (on) {
+      self.updateSelected(null, function (n) { n.visible = on; });
+    }));
+    return box;
   };
 
   // MARK: - 增删改层
 
-  App.prototype.addField = function (field) {
+  App.prototype.insert = function (node) {
     var self = this;
-    if (this.template.elements.length >= LM.MAX_ELEMENTS) return;
-    var t = this.template;
-    var ink = t.imageData ? LM.clone(LM.WHITE) : LM.contrasting(t.background);
-    var el = LM.makeElement(field, { x: 0.5, y: 0.5 + (t.elements.length % 5) * 0.05, color: ink });
-    if (field === '自定义文字' || field === '名称') el.alignment = '居中';
-    this.edit(null, function (x) { x.elements.push(el); });
-    this.selection = el.id;
-    this.refresh();
-  };
-  App.prototype.addShape = function (shape) {
-    var t = this.template;
-    if (t.elements.length >= LM.MAX_ELEMENTS) return;
-    var ink = t.imageData ? LM.clone(LM.WHITE) : LM.contrasting(t.background);
-    var sizes;
-    switch (shape) {
-      case '直线': sizes = [0.8, 0.004, 1]; break;
-      case '唱片纹': sizes = [0.5, 0.5, 1]; break;
-      case '点阵': sizes = [1, t.aspect, 1.5]; break;
-      case '胶片孔': sizes = [0.9, 0.022, null]; break;
-      case '渐变': sizes = [1, 0.6, null]; break;
-      default: sizes = [0.4, 0.25, null];
-    }
-    var dash = shape === '唱片纹' ? [0, 8] : (shape === '点阵' ? [0, 18] : (shape === '胶片孔' ? [18, 10] : null));
-    var el = LM.makeShape(shape, {
-      x: 0.5, y: 0.5, width: sizes[0], height: sizes[1], color: ink,
-      stroke: sizes[2], dash: dash
+    var target = this.selection;
+    this.edit(null, function (draft) {
+      var anchor = target === CANVAS ? null : LM.findNode(draft.root, target);
+      if (anchor && LM.isStackNode(anchor)) draft.root = LM.insertInto(draft.root, anchor.id, node);
+      else if (anchor) draft.root = LM.insertAfter(draft.root, anchor.id, node);
+      else draft.root = LM.insertInto(draft.root, draft.root.id, node);
     });
-    if (shape === '点阵' || shape === '唱片纹') el.opacity = 0.15;
-    el = LM.sanitizeElement(el);
-    this.edit(null, function (x) { x.elements.push(el); });
-    this.selection = el.id;
+    this.selection = node.id;
+    this.more = false;
     this.refresh();
   };
-  App.prototype.addImageElement = function (base64, aspect, sticker, videoBase64) {
-    if (this.template.elements.length >= LM.MAX_ELEMENTS) return;
-    var el = LM.defaultElement();
-    el.field = '自定义文字';
-    el.x = 0.5; el.y = 0.5; el.width = sticker ? 0.3 : 0.55;
-    el.imageData = base64;
-    el.imageAspect = LM.clamp(aspect, [0.02, 50], 1);
-    if (sticker) el.isSticker = true;
-    if (videoBase64) el.videoData = videoBase64;
-    el = LM.sanitizeElement(el);
-    this.edit(null, function (x) { x.elements.push(el); });
-    this.selection = el.id;
-    this.refresh();
-  };
-  App.prototype.duplicate = function (id) {
+
+  App.prototype.duplicate = function (node) {
+    var copy = LM.sanitizeNode(clone(node));
+    // id 去重交给 sanitizeTemplate：整棵子树重新发 id。
+    LM.walkNodes(copy, function (child) { child.id = LM.randomUUID(); });
     var self = this;
-    if (this.template.elements.length >= LM.MAX_ELEMENTS) return;
-    var source = null;
-    this.template.elements.forEach(function (e) { if (e.id === id) source = e; });
-    if (!source) return;
-    var copy = LM.clone(source);
-    copy.id = LM.uuid();
-    copy.y = Math.min(1.5, copy.y + 0.06);
-    this.edit(null, function (x) { x.elements.push(copy); });
+    this.edit(null, function (draft) { draft.root = LM.insertAfter(draft.root, node.id, copy); });
     this.selection = copy.id;
     this.refresh();
   };
-  App.prototype.reorder = function (id, delta) {
-    var list = this.template.elements;
-    var i = -1;
-    list.forEach(function (e, index) { if (e.id === id) i = index; });
-    var target = i + delta;
-    if (i < 0 || target < 0 || target >= list.length) return;
-    this.edit(null, function (x) {
-      var tmp = x.elements[i]; x.elements[i] = x.elements[target]; x.elements[target] = tmp;
-    });
+
+  App.prototype.addText = function (field) {
+    this.insert(LM.makeTextNode(field, {
+      fontSize: LM.suggestedSize(field),
+      weight: LM.suggestedWeight(field),
+      design: LM.suggestedDesign(field),
+    }));
   };
-  App.prototype.remove = function (id) {
-    this.edit(null, function (x) { x.elements = x.elements.filter(function (e) { return e.id !== id; }); });
-    this.selection = 'canvas';
-    this.refresh();
+  App.prototype.addShape = function (shape) {
+    this.insert(LM.makeShapeNode(shape, { height: LM.defaultShapeHeight(shape) }));
   };
+  App.prototype.addStack = function (direction) {
+    this.insert(LM.makeStackNode(direction, { gap: 8, children: [] }));
+  };
+  App.prototype.addSpacer = function () { this.insert(LM.makeSpacerNode()); };
+  App.prototype.addCover = function () { this.insert(LM.makeImageNode('cover', { aspect: 1 })); };
 
   // MARK: - 画布交互
 
-  App.prototype.hitTest = function (point) {
-    var t = this.template, self = this;
-    var split = LM.coverSplit(t);
-    function hit(list) {
-      for (var i = list.length - 1; i >= 0; i--) {
-        var frame = self.frames[list[i].id];
-        if (frame && point.x >= frame.x - 8 && point.x <= frame.x + frame.w + 8 &&
-          point.y >= frame.y - 8 && point.y <= frame.y + frame.h + 8) return list[i].id;
-      }
-      return null;
-    }
-    var above = hit(t.elements.slice(split));
-    if (above) return above;
-    var cover = this.frames.cover;
-    if (t.cover.visible && cover && point.x >= cover.x && point.x <= cover.x + cover.w &&
-      point.y >= cover.y && point.y <= cover.y + cover.h) return 'cover';
-    var below = hit(t.elements.slice(0, split));
-    if (below) return below;
-    return 'canvas';
+  App.prototype.point = function (event) {
+    var rect = this.canvas.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) / this.zoom,
+      y: (event.clientY - rect.top) / this.zoom,
+    };
   };
-  App.prototype.originOf = function (layer) {
-    var t = this.template;
-    if (layer === 'canvas') return t.imageData ? { x: t.imageOffsetX, y: t.imageOffsetY } : null;
-    if (layer === 'cover') return { x: t.cover.x, y: t.cover.y };
-    var el = this.selectedElement();
-    return el ? { x: el.x, y: el.y } : null;
-  };
-  App.prototype.moveLayer = function (layer, point) {
-    var t = this.template;
-    if (layer === 'canvas') {
-      t.imageOffsetX = LM.clamp(point.x, LM.OFFSET_RANGE, 0);
-      t.imageOffsetY = LM.clamp(point.y, LM.OFFSET_RANGE, 0);
-    } else if (layer === 'cover') {
-      t.cover.x = LM.clamp(point.x, [-0.5, 1.5], 0.5);
-      t.cover.y = LM.clamp(point.y, [-0.5, 1.5], 0.5);
-    } else {
-      var el = this.selectedElement();
-      if (!el) return;
-      el.x = LM.clamp(point.x, [-0.5, 1.5], 0.5);
-      el.y = LM.clamp(point.y, [-0.5, 1.5], 0.5);
-    }
-  };
-  App.prototype.sizesOf = function (layer) {
-    var t = this.template;
-    if (layer === 'canvas') return [t.imageScale, 0];
-    if (layer === 'cover') return [t.cover.width, t.cover.height];
-    var el = this.selectedElement();
-    if (!el) return [22, 0];
-    if (LM.isShape(el)) return [el.width, el.shapeHeight === undefined ? 0.1 : el.shapeHeight];
-    return [LM.hasImage(el) ? el.width : el.fontSize, 0];
-  };
-  App.prototype.resizeLayer = function (layer, size) {
-    var t = this.template;
-    if (layer === 'canvas') { if (t.imageData) t.imageScale = LM.clamp(size[0], LM.SCALE_RANGE, 1); return; }
-    if (layer === 'cover') {
-      t.cover.width = LM.clamp(size[0], [0.05, 2], 0.78);
-      t.cover.height = LM.clamp(size[1], [0.05, 2], 0.5);
-      return;
-    }
-    var el = this.selectedElement();
-    if (!el) return;
-    if (LM.isShape(el)) {
-      el.width = LM.clamp(size[0], [0.02, 1.5], 0.55);
-      el.shapeHeight = LM.clamp(size[1], [0.002, 3], 0.1);
-    } else if (LM.hasImage(el)) {
-      el.width = LM.clamp(size[0], [0.1, 1.5], 0.55);
-    } else {
-      el.fontSize = LM.clamp(size[0], [6, 120], 22);
-    }
+
+  /// 命中测试：文字与图片先，形状与容器其次，间隔最后；同档里深的先、后画的先。
+  App.prototype.hits = function (point) {
+    var self = this;
+    var out = [];
+    var order = { text: 0, image: 0, shape: 1, stack: 1, spacer: 2 };
+    this.scene.items.forEach(function (item, index) {
+      if (item.kind === 'clipBegin' || item.kind === 'clipEnd' || item.kind === 'mask') return;
+      var laid = self.scene.layout.byID[item.id];
+      if (!laid) return;
+      var frame = self.frames[item.id] || item.frame;
+      var box = item.rotation ? R.boundingBox(frame, item.rotation) : frame;
+      if (point.x < box.x || point.x > box.x + box.width) return;
+      if (point.y < box.y || point.y > box.y + box.height) return;
+      out.push({ id: item.id, rank: order[laid.kind] === undefined ? 1 : order[laid.kind],
+        depth: laid.depth, index: index });
+    });
+    out.sort(function (a, b) {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      if (a.depth !== b.depth) return b.depth - a.depth;
+      return b.index - a.index;
+    });
+    return out;
   };
 
   App.prototype.bindCanvas = function () {
     var self = this;
-    var overlay = document.getElementById('overlay');
-    var canvas = document.getElementById('canvas');
     var drag = null;
 
-    function toCanvas(event) {
-      var rect = canvas.getBoundingClientRect();
-      return { x: (event.clientX - rect.left) / self.viewScale, y: (event.clientY - rect.top) / self.viewScale };
-    }
-    canvas.addEventListener('pointerdown', function (event) {
-      var point = toCanvas(event);
-      var frame = self.selectionFrame();
-      var handleIndex = -1;
-      if (frame) {
-        self.handles(frame).forEach(function (p, i) {
-          if (Math.abs(p.x - point.x) < 9 / self.viewScale && Math.abs(p.y - point.y) < 9 / self.viewScale) handleIndex = i;
-        });
-      }
-      if (handleIndex >= 0) {
-        var cx = frame.x + frame.w / 2, cy = frame.y + frame.h / 2;
-        drag = {
-          mode: 'resize', base: self.sizesOf(self.selection),
-          distance: Math.max(2, Math.hypot(point.x - cx, point.y - cy)), cx: cx, cy: cy
-        };
-        self.pushUndo(null);
+    this.overlay.addEventListener('pointerdown', function (event) {
+      var point = self.point(event);
+      var hits = self.hits(point);
+      var ids = hits.map(function (hit) { return hit.id; });
+      var next;
+      if (!ids.length) {
+        next = CANVAS;
       } else {
-        var layer = self.hitTest(point);
-        if (layer !== self.selection) { self.selection = layer; self.refresh(); }
-        var origin = self.originOf(layer);
-        if (!origin) { drag = null; canvas.setPointerCapture(event.pointerId); return; }
-        drag = { mode: 'move', origin: origin, start: point };
-        self.pushUndo(null);
+        // 原地再点一下换到下面的那一层。
+        var at = ids.indexOf(self.selection);
+        next = at >= 0 && self._clickedSame ? ids[(at + 1) % ids.length] : ids[0];
       }
-      canvas.setPointerCapture(event.pointerId);
-      event.preventDefault();
+      self._clickedSame = next === self.selection;
+      if (next !== self.selection) { self.selection = next; self.more = false; self.refresh(); }
+      drag = { start: point, moved: false, id: next, node: next === CANVAS ? null : LM.findNode(self.template.root, next) };
+      if (next !== CANVAS) drag.before = clone(LM.findNode(self.template.root, next));
+      self.overlay.setPointerCapture(event.pointerId);
     });
-    canvas.addEventListener('pointermove', function (event) {
-      var point = toCanvas(event);
-      if (!drag) {
-        var over = self.hitTest(point);
-        var el = null;
-        self.template.elements.forEach(function (e) { if (e.id === over) el = e; });
-        var live = el && LM.isLivePhoto(el) ? el : null;
-        if (live && self.hoverElement !== live.id) {
-          self.hoverElement = live.id;
-          var video = self.ensureVideo(live);
-          video.currentTime = 0;
-          var promise = video.play();
-          if (promise && promise.catch) promise.catch(function () {});
-        } else if (!live && self.hoverElement) {
-          var old = self.videos[self.hoverElement];
-          if (old) old.pause();
-          self.hoverElement = null;
-          self.render();
-        }
+
+    this.overlay.addEventListener('pointermove', function (event) {
+      if (!drag) return;
+      var point = self.point(event);
+      var dx = point.x - drag.start.x, dy = point.y - drag.start.y;
+      if (!drag.moved && Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+      drag.moved = true;
+      self._clickedSame = false;
+      var node = drag.node;
+
+      if (drag.id === CANVAS) {
+        // 底图：同一套规则，框是整张画布。
+        var frame = self.frames[CANVAS];
+        if (!self.template.canvas.image || !frame || !frame.overflowX === undefined) return;
+        self.dragFocus(null, frame, drag, dx, dy);
         return;
       }
-      if (drag.mode === 'move') {
-        var H = LM.canvasHeight(self.template);
-        self.moveLayer(self.selection, {
-          x: drag.origin.x + (point.x - drag.start.x) / LM.CANVAS_W,
-          y: drag.origin.y + (point.y - drag.start.y) / H
+      if (!node) return;
+      if (LM.isImageNode(node)) {
+        self.dragFocus(node, self.frames[node.id], drag, dx, dy);
+      } else if (node.position === 'absolute') {
+        self.updateSelected('drag', function (n) {
+          n.offsetX = (drag.before.offsetX || 0) + dx;
+          n.offsetY = (drag.before.offsetY || 0) + dy;
         });
       } else {
-        var factor = Math.hypot(point.x - drag.cx, point.y - drag.cy) / drag.distance;
-        self.resizeLayer(self.selection, [drag.base[0] * factor, drag.base[1] * factor]);
+        self.dragReorder(node, point);
       }
-      self.render();
-      event.preventDefault();
     });
-    function endDrag() { if (drag) { drag = null; self.buildInspector(); } }
-    canvas.addEventListener('pointerup', endDrag);
-    canvas.addEventListener('pointercancel', endDrag);
-    canvas.addEventListener('wheel', function (event) {
+
+    this.overlay.addEventListener('pointerup', function (event) {
+      if (drag) self.overlay.releasePointerCapture(event.pointerId);
+      drag = null;
+    });
+
+    this.canvas.parentNode.parentNode.addEventListener('wheel', function (event) {
+      if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
-      var base = self.sizesOf(self.selection);
-      var factor = 1 - event.deltaY * 0.0025;
-      self.pushUndo('wheel');
-      self.resizeLayer(self.selection, [base[0] * factor, base[1] * factor]);
-      self.render();
-      clearTimeout(self._wheelTimer);
-      self._wheelTimer = setTimeout(function () { self.buildInspector(); }, 250);
+      self.zoom = Math.min(3, Math.max(0.3, self.zoom * (event.deltaY < 0 ? 1.08 : 0.93)));
+      self.draw();
+      self.renderTopBar();
     }, { passive: false });
+  };
+
+  /// 拖图片 = 改「露出哪一段」：位移除以溢出量，溢出为 0 的轴不动。
+  App.prototype.dragFocus = function (node, frame, drag, dx, dy) {
+    if (!frame) return;
+    var ox = frame.overflowX || 0, oy = frame.overflowY || 0;
+    var self = this;
+    var base = node ? drag.before : this.template.canvas.image;
+    var nextX = ox > 0.01 ? Math.min(1, Math.max(0, base.focusX - dx / ox)) : base.focusX;
+    var nextY = oy > 0.01 ? Math.min(1, Math.max(0, base.focusY - dy / oy)) : base.focusY;
+    if (node) {
+      this.updateSelected('drag', function (n) { n.focusX = nextX; n.focusY = nextY; });
+    } else {
+      this.updateCanvas('drag', function (canvas) {
+        canvas.image = Object.assign({}, canvas.image, { focusX: nextX, focusY: nextY });
+      });
+    }
+  };
+
+  /// 拖普通节点 = 在兄弟里换位：拖过相邻节点的中线就交换。
+  App.prototype.dragReorder = function (node, point) {
+    var parent = LM.parentOf(this.template.root, node.id);
+    if (!parent) return;
+    var index = parent.children.findIndex(function (child) { return child.id === node.id; });
+    if (index < 0) return;
+    var row = parent.direction === 'row';
+    var self = this;
+    var neighbour = function (step) {
+      var sibling = parent.children[index + step];
+      if (!sibling) return null;
+      var frame = self.frames[sibling.id];
+      return frame ? { id: sibling.id, frame: frame } : null;
+    };
+    var previous = neighbour(-1), next = neighbour(1);
+    var value = row ? point.x : point.y;
+    if (previous) {
+      var pm = row ? previous.frame.x + previous.frame.width / 2 : previous.frame.y + previous.frame.height / 2;
+      if (value < pm) {
+        this.edit('reorder', function (draft) { draft.root = LM.moveNode(draft.root, node.id, 'up'); });
+        return;
+      }
+    }
+    if (next) {
+      var nm = row ? next.frame.x + next.frame.width / 2 : next.frame.y + next.frame.height / 2;
+      if (value > nm) {
+        this.edit('reorder', function (draft) { draft.root = LM.moveNode(draft.root, node.id, 'down'); });
+      }
+    }
   };
 
   // MARK: - 键盘
@@ -1093,32 +1258,38 @@
       if (meta && event.key.toLowerCase() === 'z') { event.preventDefault(); self.undo(); return; }
       if (meta && event.key.toLowerCase() === 'd') {
         event.preventDefault();
-        if (self.selectedElement()) self.duplicate(self.selection);
+        var node = self.node();
+        if (node && !self.isRoot(node.id)) self.duplicate(node);
         return;
       }
-      if (event.key === 'Backspace' || event.key === 'Delete') {
-        if (self.selectedElement()) { event.preventDefault(); self.remove(self.selection); }
+      if (event.key === 'Escape') { self.selection = CANVAS; self.refresh(); return; }
+      var current = self.node();
+      if (!current || self.isRoot(current.id)) return;
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        self.edit(null, function (draft) { draft.root = LM.removeNode(draft.root, current.id); });
+        self.selection = CANVAS;
+        self.refresh();
         return;
       }
-      var step = event.shiftKey ? 0.02 : 0.004;
-      var dx = 0, dy = 0;
-      if (event.key === 'ArrowLeft') dx = -step;
-      else if (event.key === 'ArrowRight') dx = step;
-      else if (event.key === 'ArrowUp') dy = -step;
-      else if (event.key === 'ArrowDown') dy = step;
-      else if (event.key === 'Escape') { self.selection = 'canvas'; self.refresh(); return; }
-      else return;
+      var step = event.shiftKey ? 10 : 1;
+      var moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      var move = moves[event.key];
+      if (!move) return;
       event.preventDefault();
-      var origin = self.originOf(self.selection);
-      if (!origin) return;
-      self.pushUndo('nudge');
-      self.moveLayer(self.selection, { x: origin.x + dx, y: origin.y + dy });
-      self.render();
-      clearTimeout(self._nudgeTimer);
-      self._nudgeTimer = setTimeout(function () { self.buildInspector(); }, 250);
+      if (current.position === 'absolute') {
+        self.updateSelected('nudge', function (n) {
+          n.offsetX = (n.offsetX || 0) + move[0];
+          n.offsetY = (n.offsetY || 0) + move[1];
+        });
+      } else {
+        self.edit(null, function (draft) {
+          draft.root = LM.moveNode(draft.root, current.id, move[1] < 0 || move[0] < 0 ? 'up' : 'down');
+        });
+      }
     });
   };
 
+  global.LMUI = { h: h, pct: pct, pt: pt, deg: deg, ratio: ratio, dataURL: dataURL, mimeFor: mimeFor };
   global.LMApp = App;
-  global.LMUI = { h: h, pct: pct, deg: deg, one: one, mimeFor: mimeFor };
 })(window);

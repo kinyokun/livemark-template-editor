@@ -169,3 +169,39 @@ input[type=range] { width: 100%; accent-color: var(--ink); height: 20px; }
   font-size: 15px; font-weight: 700; border: 3px dashed var(--ink);
 }
 .drop-veil.on { display: flex; }
+
+/* ---- v2：树状图层、折叠区、锚点九宫格 ---- */
+
+.field.group { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; gap: 6px; }
+.field .row { display: flex; gap: 6px; flex-wrap: wrap; }
+.row .mini { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+.row .mini input { width: 48px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; background: var(--paper); }
+
+.disclosure { margin: 10px 0 4px; border-top: 1px solid var(--line); padding-top: 8px; }
+.disclosure-head {
+  width: 100%; text-align: left; border: 0; background: none; padding: 4px 0;
+  font-weight: 700; color: var(--muted); letter-spacing: 0.5px;
+}
+.disclosure-body { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+
+.anchors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.anchor {
+  border: 1px solid var(--line); background: var(--paper); border-radius: 6px;
+  height: 26px; color: var(--muted); line-height: 1;
+}
+.anchor.on { background: var(--ink); color: #fdfbf4; border-color: var(--ink); }
+
+.panel { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 10px; }
+.insp-title .grow { flex: 1; font-weight: 700; }
+
+.menu .on { background: var(--fill); font-weight: 700; }
+.menu details.sub { border-top: 1px solid var(--line); }
+.menu details.sub summary { padding: 5px 12px; cursor: pointer; color: var(--muted); font-size: 11px; }
+.menu details.sub button { padding-left: 22px; }
+
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+.checks .toggle { display: flex; align-items: center; gap: 5px; font-size: 11px; }
+.checks .toggle.private span { color: var(--stamp); }
+.private-note { font-size: 10px; color: var(--muted); line-height: 1.4; margin-top: 6px; }
+.lib-item.grow { flex: 1; text-align: left; }
+.hint { font-size: 11px; color: var(--muted); line-height: 1.45; }
