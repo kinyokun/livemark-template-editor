@@ -1976,7 +1976,7 @@
     exports.gridLayer = gridLayer;
     const replace = (template, change) => ({ ...template, root: { ...template.root, children: template.root.children.map(change) } });
     function createGridLayer(frame, columns = 2, rows = 2, env) {
-        return (0, model_1.makeStackNode)('column', { name: '网格图层', layout: 'grid', frame: { ...frame, height: 0 }, padding: model_1.ZERO_PADDING,
+        return (0, model_1.makeStackNode)('column', { name: '内容模块', layout: 'grid', frame: { ...frame, height: 0 }, padding: model_1.ZERO_PADDING,
             grid: (0, model_1.sanitizeGrid)({ rows, columns, rowGap: 12, columnGap: 12 }), children: [] }, env);
     }
     function gridCellAt(grid, row, column) {
@@ -2006,7 +2006,7 @@
                 result.push({ ...cell, localFrame: { x, y, width, height },
                     frame: { x: owner.x + owner.width / 2 + dx * Math.cos(angle) - dy * Math.sin(angle) - width / 2,
                         y: owner.y + owner.height / 2 + dx * Math.sin(angle) + dy * Math.cos(angle) - height / 2, width, height },
-                    rotation: (_d = layer.rotation) !== null && _d !== void 0 ? _d : 0, collapsed: height <= .01 });
+                    rotation: (_d = layer.rotation) !== null && _d !== void 0 ? _d : 0, collapsed: layout.byID[layerId].collapsed || height <= .01 });
             }
         return result;
     }
@@ -2153,7 +2153,7 @@
     const canvas_1 = require("./canvas");
     const grid_1 = require("./grid");
     const MAX_CONTENT_HEIGHT = 20000;
-    function layoutCanvas(template, values, measure, options = {}) {
+    function layoutCanvas(template, values, measure, _options = {}) {
         var _a, _b, _c, _d, _e, _f;
         const source = template.root.children;
         const grids = {};
@@ -2174,7 +2174,7 @@
         const solveGrid = (owner) => {
             var _a, _b, _c;
             const grid = owner.grid, members = (_a = scopes.get(owner.id)) !== null && _a !== void 0 ? _a : [], pad = (_b = owner.padding) !== null && _b !== void 0 ? _b : model_1.ZERO_PADDING;
-            const initial = (0, canvas_1.elementFrame)(owner), editing = options.editingGridId === owner.id;
+            const initial = (0, canvas_1.elementFrame)(owner);
             const available = Math.max(1, initial.width - pad.left - pad.right - (grid.columns - 1) * grid.columnGap);
             const weights = Array.from({ length: grid.columns }, (_, i) => { var _a, _b; return Math.max(.05, (_b = (_a = grid.columnWeights) === null || _a === void 0 ? void 0 : _a[i]) !== null && _b !== void 0 ? _b : 1); });
             const sum = weights.reduce((a, b) => a + b, 0), columnWidths = weights.map(weight => available * weight / sum);
@@ -2182,7 +2182,7 @@
             let x = pad.left;
             columnWidths.forEach(width => { columnOffsets.push(x); x += width + grid.columnGap; });
             const rowHeights = Array.from({ length: grid.rows }, (_, i) => { var _a, _b; return (_b = (_a = grid.rowHeights) === null || _a === void 0 ? void 0 : _a[i]) !== null && _b !== void 0 ? _b : 0; });
-            const active = Array.from({ length: grid.rows }, () => editing || grid.collapseEmptyRows === false);
+            const active = Array.from({ length: grid.rows }, () => grid.collapseEmptyRows === false);
             const entries = members.map(node => {
                 var _a, _b, _c;
                 const frame = (0, canvas_1.elementFrame)(node), cell = node.cell ? (0, grid_1.gridCellAt)(grid, node.cell.row, node.cell.column) : undefined;
@@ -2203,7 +2203,7 @@
             for (let row = 0; row < grid.rows; row++) {
                 if (!active[row])
                     rowHeights[row] = 0;
-                else if ((editing || grid.collapseEmptyRows === false) && ((_c = grid.rowHeights) === null || _c === void 0 ? void 0 : _c[row]) == null)
+                else if (grid.collapseEmptyRows === false && ((_c = grid.rowHeights) === null || _c === void 0 ? void 0 : _c[row]) == null)
                     rowHeights[row] = Math.max(40, rowHeights[row]);
             }
             // Spanning content grows only automatic rows. Fixed tracks remain fixed and report overflow.
@@ -2282,7 +2282,7 @@
                     const resolved = solveGrid(node);
                     children = resolved.children;
                     height = resolved.height;
-                    collapsed || (collapsed = options.editingGridId !== node.id && node.collapseWhenEmpty !== false && resolved.empty);
+                    collapsed || (collapsed = node.collapseWhenEmpty !== false && resolved.empty);
                 }
                 let y = initial.y;
                 if (node.follow) {
@@ -2468,7 +2468,7 @@
     // 长度使用 360 pt 逻辑画布；显示缩放与导出分辨率不改变文档坐标。
     // 老的 StackNode 辅助类型保留为内部调用接口，编辑器不暴露行列树。
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.STARTERS = exports.TEMPLATE_NODE_KINDS = exports.ZERO_PADDING = exports.ANCHORS = exports.JUSTIFIES = exports.ALIGNS = exports.TEMPLATE_FIELD_GROUPS = exports.TEMPLATE_FIELDS = exports.TEMPLATE_SHAPES = exports.TEMPLATE_ACCENTS = exports.TEMPLATE_ALIGNMENTS = exports.TEMPLATE_FONT_DESIGNS = exports.TEMPLATE_WEIGHTS = exports.COLOR_PRESETS = exports.Palette = exports.IMAGE_ASPECT_PRESETS = exports.ASPECT_PRESETS = exports.TILT_RANGE = exports.ZOOM_RANGE = exports.FOCUS_RANGE = exports.IMAGE_ASPECT_RANGE = exports.GROW_RANGE = exports.OFFSET_RANGE = exports.FRACTION_RANGE = exports.SIZE_RANGE = exports.BORDER_RANGE = exports.DASH_RANGE = exports.STROKE_RANGE = exports.CORNER_RADIUS_RANGE = exports.PADDING_RANGE = exports.GAP_RANGE = exports.OPACITY_RANGE = exports.ROTATION_RANGE = exports.LINE_LIMIT_RANGE = exports.TRACKING_RANGE = exports.FONT_SIZE_RANGE = exports.MAX_NAME_LENGTH = exports.MAX_DEPTH = exports.MAX_NODES = exports.DEFAULT_TEMPLATE_NAME = exports.ASPECT_RANGE = exports.EXPORT_WIDTH_RANGE = exports.EXPORT_WIDTH_PRESETS = exports.DEFAULT_EXPORT_WIDTH = exports.CANVAS_WIDTH = void 0;
+    exports.STARTERS = exports.TEMPLATE_NODE_KINDS = exports.IMAGE_CONTENT_SLOTS = exports.ZERO_PADDING = exports.ANCHORS = exports.JUSTIFIES = exports.ALIGNS = exports.TEMPLATE_FIELD_GROUPS = exports.TEMPLATE_FIELDS = exports.TEMPLATE_SHAPES = exports.TEMPLATE_ACCENTS = exports.TEMPLATE_ALIGNMENTS = exports.TEMPLATE_FONT_DESIGNS = exports.TEMPLATE_WEIGHTS = exports.COLOR_PRESETS = exports.Palette = exports.IMAGE_ASPECT_PRESETS = exports.ASPECT_PRESETS = exports.TILT_RANGE = exports.ZOOM_RANGE = exports.FOCUS_RANGE = exports.IMAGE_ASPECT_RANGE = exports.GROW_RANGE = exports.OFFSET_RANGE = exports.FRACTION_RANGE = exports.SIZE_RANGE = exports.BORDER_RANGE = exports.DASH_RANGE = exports.STROKE_RANGE = exports.CORNER_RADIUS_RANGE = exports.PADDING_RANGE = exports.GAP_RANGE = exports.OPACITY_RANGE = exports.ROTATION_RANGE = exports.LINE_LIMIT_RANGE = exports.TRACKING_RANGE = exports.FONT_SIZE_RANGE = exports.MAX_NAME_LENGTH = exports.MAX_DEPTH = exports.MAX_NODES = exports.DEFAULT_TEMPLATE_NAME = exports.ASPECT_RANGE = exports.EXPORT_WIDTH_RANGE = exports.EXPORT_WIDTH_PRESETS = exports.DEFAULT_EXPORT_WIDTH = exports.CANVAS_WIDTH = void 0;
     exports.makeColor = makeColor;
     exports.colorFromHex = colorFromHex;
     exports.colorFromHexString = colorFromHexString;
@@ -2951,6 +2951,7 @@
     function isZeroPadding(value) {
         return !value || (!value.top && !value.right && !value.bottom && !value.left);
     }
+    exports.IMAGE_CONTENT_SLOTS = ['image', 'livePhoto', 'handwriting'];
     exports.TEMPLATE_NODE_KINDS = ['stack', 'text', 'image', 'shape', 'spacer'];
     function isStackNode(node) {
         return node.kind === 'stack';
@@ -3060,7 +3061,7 @@
         return node.source !== 'cover';
     }
     function nodeIsLivePhoto(node) {
-        return isImageNode(node) && !!node.video;
+        return isImageNode(node) && !node.contentSlot && !!node.video;
     }
     function templateHasImage(template) {
         const image = template.canvas.image;
@@ -3495,6 +3496,7 @@
                 return definedOnly({
                     ...base,
                     kind: 'image',
+                    contentSlot: enumOrUndefined(value.contentSlot, exports.IMAGE_CONTENT_SLOTS),
                     handwriting: sanitizeHandwriting(value.handwriting),
                     source: sanitizeImageSource(value.source),
                     imageAspect: optionalClamp(value.imageAspect, exports.IMAGE_ASPECT_RANGE, 1),
@@ -4666,6 +4668,8 @@
                     out.hideWhenEmpty = false;
                 break;
             case 'image':
+                if (node.contentSlot)
+                    out.contentSlot = node.contentSlot;
                 if (node.handwriting)
                     out.handwriting = { ...node.handwriting };
                 out.source = encodeImageSource(node.source);
@@ -5193,6 +5197,8 @@
         return key;
     }
     function nodeImageSource(node, context) {
+        if (node.contentSlot)
+            return null;
         if (node.source === 'cover')
             return context.cover.source;
         if ('data' in node.source && node.source.data) {
@@ -5525,7 +5531,7 @@
                 shadow: node.shadow === true,
                 isSticker: node.isSticker === true,
                 isLive: (0, model_1.nodeIsLivePhoto)(node),
-                artwork: node.source === 'cover' ? context.cover.artwork : null,
+                artwork: !node.contentSlot && node.source === 'cover' ? context.cover.artwork : null,
                 title: context.cover.title,
             };
         }

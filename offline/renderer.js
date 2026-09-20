@@ -1,4 +1,4 @@
-globalThis.LMOfflineBuild={"engineVersion":"livemark-ck041-cpu-748a487ac98025e36726","canvasKitVersion":"0.41.0","backend":"software","fonts":{"Caveat-Bold.ttf":"0a71de7c0f19f93aac97312f369b69518ae4ef1d93a2ccecc1cd67bd2cf75781","Caveat.ttf":"56b8a8a43664c2bf81e18832a2f0e0d63828a28cd2f5761ec00751dd5bb88103","CormorantGaramond-Bold.ttf":"a0c3bb83a7987fb951a98b45f0f00160dc1b73e6393af70d2033d92795d9f694","CormorantGaramond.ttf":"5f0c208aa786fb8793a6f608dddace859a953af5daf35653405fa191798d626e","LXGWWenKaiTC-Bold.ttf":"5c9feadfd928f3ae3860e7d001ad3d0d0c55b0157fff08cd4d51b51aca677f23","LXGWWenKaiTC-Regular.ttf":"4fcc5aec11cbbf737b0cfab7b63796f7f280087a7a656b2f13342cd5e5318d95","NotoEmoji-Regular.ttf":"5af8eae90f965bd51bedee7507a692369d9ea5a6d271abe655af18d86c078391","NotoSansSC-Bold.ttf":"35e0f43ccc3b9f08f3c92e9e8176423226ebe43f9e48353bbb8f93ec3fd5a539","NotoSansSC.ttf":"f202dac4ea2a718e6269ca986774b2a0a0e117032fa2fade78f8f37143e2e0cf","NotoSerifSC-Bold.ttf":"c522280c17862eaf924e6fd30e736cd2cb237de52fc31cbb6b93cfc47f15ae38","NotoSerifSC.ttf":"2ddc6ff165a90a20fbc05ce503af454955e8ce67afc54e53d291614bb578169b","PlayfairDisplay-Bold.ttf":"4291782b6305de93ef8ec5084788f3a1c680ed980336f5d4384960676d7b4149","PlayfairDisplay.ttf":"9ae96c60234c4376ac172b3410924c98cb0e39900a9d7345bbda6c5309532ab7","SpaceGrotesk-Bold.ttf":"4e330c1557b9576614b9a3d4dd80ab5510234c4e8aaae9b434f4b2e542b3dabe","SpaceGrotesk.ttf":"21ec382ecb51435de457a5bf9e313fe5f4eba933c94ce8e4a1cbe9994df41a25","ZCOOLXiaoWei-Regular.ttf":"a42b620140f493db42f741351dfbf343c0936d58588ee8004b8b2a218d997ff1"},"wasmSha256":"eb68c7a7f602d8cb89915352c4471a2d26edfd72000f78202cb1fe32ce1f9dc4"};
+globalThis.LMOfflineBuild={"engineVersion":"livemark-ck041-cpu-c23e4f18e472835759e3","canvasKitVersion":"0.41.0","backend":"software","fonts":{"Caveat-Bold.ttf":"0a71de7c0f19f93aac97312f369b69518ae4ef1d93a2ccecc1cd67bd2cf75781","Caveat.ttf":"56b8a8a43664c2bf81e18832a2f0e0d63828a28cd2f5761ec00751dd5bb88103","CormorantGaramond-Bold.ttf":"a0c3bb83a7987fb951a98b45f0f00160dc1b73e6393af70d2033d92795d9f694","CormorantGaramond.ttf":"5f0c208aa786fb8793a6f608dddace859a953af5daf35653405fa191798d626e","LXGWWenKaiTC-Bold.ttf":"5c9feadfd928f3ae3860e7d001ad3d0d0c55b0157fff08cd4d51b51aca677f23","LXGWWenKaiTC-Regular.ttf":"4fcc5aec11cbbf737b0cfab7b63796f7f280087a7a656b2f13342cd5e5318d95","NotoEmoji-Regular.ttf":"5af8eae90f965bd51bedee7507a692369d9ea5a6d271abe655af18d86c078391","NotoSansSC-Bold.ttf":"35e0f43ccc3b9f08f3c92e9e8176423226ebe43f9e48353bbb8f93ec3fd5a539","NotoSansSC.ttf":"f202dac4ea2a718e6269ca986774b2a0a0e117032fa2fade78f8f37143e2e0cf","NotoSerifSC-Bold.ttf":"c522280c17862eaf924e6fd30e736cd2cb237de52fc31cbb6b93cfc47f15ae38","NotoSerifSC.ttf":"2ddc6ff165a90a20fbc05ce503af454955e8ce67afc54e53d291614bb578169b","PlayfairDisplay-Bold.ttf":"4291782b6305de93ef8ec5084788f3a1c680ed980336f5d4384960676d7b4149","PlayfairDisplay.ttf":"9ae96c60234c4376ac172b3410924c98cb0e39900a9d7345bbda6c5309532ab7","SpaceGrotesk-Bold.ttf":"4e330c1557b9576614b9a3d4dd80ab5510234c4e8aaae9b434f4b2e542b3dabe","SpaceGrotesk.ttf":"21ec382ecb51435de457a5bf9e313fe5f4eba933c94ce8e4a1cbe9994df41a25","ZCOOLXiaoWei-Regular.ttf":"a42b620140f493db42f741351dfbf343c0936d58588ee8004b8b2a218d997ff1"},"wasmSha256":"eb68c7a7f602d8cb89915352c4471a2d26edfd72000f78202cb1fe32ce1f9dc4"};
 (function(global){
 const modules={"src/features/share/offline/engine.js":function(require,module,exports){
 "use strict";
@@ -341,7 +341,7 @@ function utf8Decode(bytes) {
 "src/core/template/model.ts":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.STARTERS = exports.TEMPLATE_NODE_KINDS = exports.ZERO_PADDING = exports.ANCHORS = exports.JUSTIFIES = exports.ALIGNS = exports.TEMPLATE_FIELD_GROUPS = exports.TEMPLATE_FIELDS = exports.TEMPLATE_SHAPES = exports.TEMPLATE_ACCENTS = exports.TEMPLATE_ALIGNMENTS = exports.TEMPLATE_FONT_DESIGNS = exports.TEMPLATE_WEIGHTS = exports.COLOR_PRESETS = exports.Palette = exports.IMAGE_ASPECT_PRESETS = exports.ASPECT_PRESETS = exports.TILT_RANGE = exports.ZOOM_RANGE = exports.FOCUS_RANGE = exports.IMAGE_ASPECT_RANGE = exports.GROW_RANGE = exports.OFFSET_RANGE = exports.FRACTION_RANGE = exports.SIZE_RANGE = exports.BORDER_RANGE = exports.DASH_RANGE = exports.STROKE_RANGE = exports.CORNER_RADIUS_RANGE = exports.PADDING_RANGE = exports.GAP_RANGE = exports.OPACITY_RANGE = exports.ROTATION_RANGE = exports.LINE_LIMIT_RANGE = exports.TRACKING_RANGE = exports.FONT_SIZE_RANGE = exports.MAX_NAME_LENGTH = exports.MAX_DEPTH = exports.MAX_NODES = exports.DEFAULT_TEMPLATE_NAME = exports.ASPECT_RANGE = exports.EXPORT_WIDTH_RANGE = exports.EXPORT_WIDTH_PRESETS = exports.DEFAULT_EXPORT_WIDTH = exports.CANVAS_WIDTH = void 0;
+exports.STARTERS = exports.TEMPLATE_NODE_KINDS = exports.IMAGE_CONTENT_SLOTS = exports.ZERO_PADDING = exports.ANCHORS = exports.JUSTIFIES = exports.ALIGNS = exports.TEMPLATE_FIELD_GROUPS = exports.TEMPLATE_FIELDS = exports.TEMPLATE_SHAPES = exports.TEMPLATE_ACCENTS = exports.TEMPLATE_ALIGNMENTS = exports.TEMPLATE_FONT_DESIGNS = exports.TEMPLATE_WEIGHTS = exports.COLOR_PRESETS = exports.Palette = exports.IMAGE_ASPECT_PRESETS = exports.ASPECT_PRESETS = exports.TILT_RANGE = exports.ZOOM_RANGE = exports.FOCUS_RANGE = exports.IMAGE_ASPECT_RANGE = exports.GROW_RANGE = exports.OFFSET_RANGE = exports.FRACTION_RANGE = exports.SIZE_RANGE = exports.BORDER_RANGE = exports.DASH_RANGE = exports.STROKE_RANGE = exports.CORNER_RADIUS_RANGE = exports.PADDING_RANGE = exports.GAP_RANGE = exports.OPACITY_RANGE = exports.ROTATION_RANGE = exports.LINE_LIMIT_RANGE = exports.TRACKING_RANGE = exports.FONT_SIZE_RANGE = exports.MAX_NAME_LENGTH = exports.MAX_DEPTH = exports.MAX_NODES = exports.DEFAULT_TEMPLATE_NAME = exports.ASPECT_RANGE = exports.EXPORT_WIDTH_RANGE = exports.EXPORT_WIDTH_PRESETS = exports.DEFAULT_EXPORT_WIDTH = exports.CANVAS_WIDTH = void 0;
 exports.makeColor = makeColor;
 exports.colorFromHex = colorFromHex;
 exports.colorFromHexString = colorFromHexString;
@@ -791,6 +791,7 @@ function padding(a, b, c, d) {
 function isZeroPadding(value) {
     return !value || (!value.top && !value.right && !value.bottom && !value.left);
 }
+exports.IMAGE_CONTENT_SLOTS = ['image', 'livePhoto', 'handwriting'];
 exports.TEMPLATE_NODE_KINDS = ['stack', 'text', 'image', 'shape', 'spacer'];
 function isStackNode(node) {
     return node.kind === 'stack';
@@ -894,7 +895,7 @@ function nodeHasOwnImage(node) {
     return node.source !== 'cover';
 }
 function nodeIsLivePhoto(node) {
-    return isImageNode(node) && !!node.video;
+    return isImageNode(node) && !node.contentSlot && !!node.video;
 }
 function templateHasImage(template) {
     const image = template.canvas.image;
@@ -1306,6 +1307,7 @@ function sanitizeNodeIn(raw, context, depth) {
             return definedOnly({
                 ...base,
                 kind: 'image',
+                contentSlot: enumOrUndefined(value.contentSlot, exports.IMAGE_CONTENT_SLOTS),
                 handwriting: sanitizeHandwriting(value.handwriting),
                 source: sanitizeImageSource(value.source),
                 imageAspect: optionalClamp(value.imageAspect, exports.IMAGE_ASPECT_RANGE, 1),
@@ -2103,7 +2105,7 @@ const gridLayer = (template, id) => template.root.children.find((n) => n.id === 
 exports.gridLayer = gridLayer;
 const replace = (template, change) => ({ ...template, root: { ...template.root, children: template.root.children.map(change) } });
 function createGridLayer(frame, columns = 2, rows = 2, env) {
-    return (0, model_1.makeStackNode)('column', { name: '网格图层', layout: 'grid', frame: { ...frame, height: 0 }, padding: model_1.ZERO_PADDING,
+    return (0, model_1.makeStackNode)('column', { name: '内容模块', layout: 'grid', frame: { ...frame, height: 0 }, padding: model_1.ZERO_PADDING,
         grid: (0, model_1.sanitizeGrid)({ rows, columns, rowGap: 12, columnGap: 12 }), children: [] }, env);
 }
 function gridCellAt(grid, row, column) {
@@ -2131,7 +2133,7 @@ function gridCellFrames(template, layerId, layout) {
             result.push({ ...cell, localFrame: { x, y, width, height },
                 frame: { x: owner.x + owner.width / 2 + dx * Math.cos(angle) - dy * Math.sin(angle) - width / 2,
                     y: owner.y + owner.height / 2 + dx * Math.sin(angle) + dy * Math.cos(angle) - height / 2, width, height },
-                rotation: layer.rotation ?? 0, collapsed: height <= .01 });
+                rotation: layer.rotation ?? 0, collapsed: layout.byID[layerId].collapsed || height <= .01 });
         }
     return result;
 }
@@ -2406,6 +2408,8 @@ function inlineImageKey(owner, data) {
     return key;
 }
 function nodeImageSource(node, context) {
+    if (node.contentSlot)
+        return null;
     if (node.source === 'cover')
         return context.cover.source;
     if ('data' in node.source && node.source.data) {
@@ -2709,7 +2713,7 @@ function nodeItem(node, base, context, values, placeholders, canvasMode) {
             shadow: node.shadow === true,
             isSticker: node.isSticker === true,
             isLive: (0, model_1.nodeIsLivePhoto)(node),
-            artwork: node.source === 'cover' ? context.cover.artwork : null,
+            artwork: !node.contentSlot && node.source === 'cover' ? context.cover.artwork : null,
             title: context.cover.title,
         };
     }
@@ -4393,7 +4397,7 @@ const model_1 = require("src/core/template/model.ts");
 const canvas_1 = require("src/core/template/canvas.ts");
 const grid_1 = require("src/core/template/grid.ts");
 const MAX_CONTENT_HEIGHT = 20000;
-function layoutCanvas(template, values, measure, options = {}) {
+function layoutCanvas(template, values, measure, _options = {}) {
     const source = template.root.children;
     const grids = {};
     const scopes = new Map();
@@ -4411,7 +4415,7 @@ function layoutCanvas(template, values, measure, options = {}) {
     };
     const solveGrid = (owner) => {
         const grid = owner.grid, members = scopes.get(owner.id) ?? [], pad = owner.padding ?? model_1.ZERO_PADDING;
-        const initial = (0, canvas_1.elementFrame)(owner), editing = options.editingGridId === owner.id;
+        const initial = (0, canvas_1.elementFrame)(owner);
         const available = Math.max(1, initial.width - pad.left - pad.right - (grid.columns - 1) * grid.columnGap);
         const weights = Array.from({ length: grid.columns }, (_, i) => Math.max(.05, grid.columnWeights?.[i] ?? 1));
         const sum = weights.reduce((a, b) => a + b, 0), columnWidths = weights.map(weight => available * weight / sum);
@@ -4419,7 +4423,7 @@ function layoutCanvas(template, values, measure, options = {}) {
         let x = pad.left;
         columnWidths.forEach(width => { columnOffsets.push(x); x += width + grid.columnGap; });
         const rowHeights = Array.from({ length: grid.rows }, (_, i) => grid.rowHeights?.[i] ?? 0);
-        const active = Array.from({ length: grid.rows }, () => editing || grid.collapseEmptyRows === false);
+        const active = Array.from({ length: grid.rows }, () => grid.collapseEmptyRows === false);
         const entries = members.map(node => {
             const frame = (0, canvas_1.elementFrame)(node), cell = node.cell ? (0, grid_1.gridCellAt)(grid, node.cell.row, node.cell.column) : undefined;
             const collapsed = node.visible === false || (node.kind === 'text' && (values[node.id] ?? null) === null && node.hideWhenEmpty !== false);
@@ -4439,7 +4443,7 @@ function layoutCanvas(template, values, measure, options = {}) {
         for (let row = 0; row < grid.rows; row++) {
             if (!active[row])
                 rowHeights[row] = 0;
-            else if ((editing || grid.collapseEmptyRows === false) && grid.rowHeights?.[row] == null)
+            else if (grid.collapseEmptyRows === false && grid.rowHeights?.[row] == null)
                 rowHeights[row] = Math.max(40, rowHeights[row]);
         }
         for (const entry of entries.filter(e => e.cell && !e.collapsed && !e.node.decoration).sort((a, b) => a.cell.rowSpan - b.cell.rowSpan)) {
@@ -4514,7 +4518,7 @@ function layoutCanvas(template, values, measure, options = {}) {
                 const resolved = solveGrid(node);
                 children = resolved.children;
                 height = resolved.height;
-                collapsed || (collapsed = options.editingGridId !== node.id && node.collapseWhenEmpty !== false && resolved.empty);
+                collapsed || (collapsed = node.collapseWhenEmpty !== false && resolved.empty);
             }
             let y = initial.y;
             if (node.follow) {

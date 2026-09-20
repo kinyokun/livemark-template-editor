@@ -525,7 +525,14 @@
     }
     var image = item.source ? (images.get(item.source.key) || null) : null;
     var placed = null;
-    if (image) {
+    if (item.templatePlaceholder) {
+      ctx.fillStyle = '#dfe5da';
+      ctx.fillRect(border, border, innerW, innerH);
+      ctx.fillStyle = '#67715e';
+      ctx.font = Math.min(14, Math.max(8, innerW / 10)) + 'px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(item.templatePlaceholder, border + innerW / 2, border + innerH / 2, Math.max(1, innerW - 12));
+    } else if (image) {
       placed = drawPlacedImage(ctx, image, border, border, innerW, innerH, {
         fit: item.fit, focusX: item.focusX, focusY: item.focusY, zoom: item.zoom,
       });

@@ -8,6 +8,7 @@
       if (value === undefined || value === null) return;
       if (key === 'text') element.textContent = value;
       else if (key === 'class') element.className = value;
+      else if (key === 'style' && typeof value === 'object') Object.assign(element.style, value);
       else if (key.startsWith('on')) element.addEventListener(key.slice(2), value);
       else if (key in element) element[key] = value;
       else element.setAttribute(key, value);
