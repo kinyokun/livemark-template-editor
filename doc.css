@@ -1,0 +1,16 @@
+/* 隐私政策与技术支持页。配色同 App：纸 #F6F3E9、墨 #20251F。 */
+:root { --paper:#f6f3e9; --surface:#fffdf7; --ink:#20251f; --muted:#6d6a60; --line:rgba(32,37,31,.14); --stamp:#c4553f; }
+@media (prefers-color-scheme: dark) { :root { --paper:#131416; --surface:#1c1d20; --ink:#ecebe4; --muted:#a09d93; --line:rgba(236,235,228,.16); --stamp:#e27a63; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC",system-ui,"Noto Sans CJK SC",sans-serif; -webkit-font-smoothing:antialiased; }
+main { max-width:680px; margin:0 auto; padding:24px 16px 64px; }
+header { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px; padding-bottom:16px; border-bottom:1px solid var(--line); }
+.brand { font-weight:800; letter-spacing:3px; font-size:14px; }
+nav { font-size:14px; color:var(--muted); }
+a { color:var(--stamp); text-underline-offset:2px; }
+h1 { font-size:28px; line-height:1.25; margin:32px 0 4px; }
+h2 { font-size:18px; margin:28px 0 6px; }
+.meta { color:var(--muted); font-size:14px; margin-top:0; }
+ul { padding-left:1.2em; } li { margin:6px 0; }
+hr { border:0; border-top:1px solid var(--line); margin:48px 0 0; }
+dt { font-weight:600; margin-top:18px; } dd { margin:4px 0 0; color:var(--ink); }
